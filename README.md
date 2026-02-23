@@ -52,7 +52,7 @@ Azure Container Apps  ←──────────────────�
 | Decision | Rationale |
 |---|---|
 | **FastAPI** | Native async support, auto OpenAPI docs, excellent DI system, Python type hints |
-| **Beanie / Motor** | Async ODM for MongoDB. Pydantic v2 models mean one schema for DB + API validation |
+| **Beanie / Motor** | Async ODM for Cosmos DB (MongoDB-compatible API). Pydantic v2 models mean one schema for DB + API validation |
 | **Polymorphic ingredients** | All activity types in one collection enables cross-type queries and simplifies the AI matching layer |
 | **Strategy Pattern for AI** | Swap `MockAIEngine → ClaudeAIEngine` with a single line change, zero route rewrites |
 | **Azure Managed Identity** | No credentials in code or environment variables in production. Eliminates an entire class of secrets-management bugs |
@@ -87,7 +87,7 @@ dharma-ai-backend/
 ├── scripts/
 │   └── seed_data.py              # Populates local DB with sample data
 ├── .env.example                  # Variable reference — copy to .env
-├── docker-compose.yml            # Local dev: MongoDB + API with hot-reload
+├── docker-compose.yml            # Local dev: Cosmos DB Emulator + API with hot-reload
 ├── Dockerfile                    # Multi-stage production image
 ├── requirements.txt
 └── README.md
@@ -165,10 +165,13 @@ cd dharma-ai-backend
 cp .env.example .env
 # No changes needed for local development — defaults work out of the box.
 
-# 3. Start MongoDB + API with hot-reload
+# 3. Start Cosmos DB Emulator + API
+#    ⚠️  First run pulls a ~2 GB image and the emulator takes 60-120 s to initialise.
+#    Watch startup progress in a second terminal while this runs:
+#      docker-compose logs -f cosmos-emulator
 docker-compose up -d
 
-# 4. Verify the server is running
+# 4. Verify the server is running (only succeeds once the emulator is healthy)
 curl http://localhost:8000/health
 # → {"status":"ok","service":"Dharma AI Backend","version":"1.0.0","environment":"local"}
 
@@ -177,32 +180,43 @@ docker-compose exec api python -m scripts.seed_data
 
 # 6. Open interactive API docs
 open http://localhost:8000/docs
+
+# Optional: open the Cosmos DB Data Explorer (accept the self-signed cert prompt)
+open https://localhost:8081/_explorer/index.html
 ```
 
 **Useful commands:**
 ```bash
-docker-compose logs -f api          # Tail API logs
-docker-compose logs -f mongo        # Tail MongoDB logs
-docker-compose restart api          # Restart after config changes
-docker-compose down -v              # Stop and wipe all data
+docker-compose logs -f api                # Tail API logs
+docker-compose logs -f cosmos-emulator    # Tail Cosmos DB Emulator logs
+docker-compose restart api                # Restart after config changes
+docker-compose down -v                    # Stop and wipe all data
 ```
 
 ### Option B — Bare Metal (No Docker)
 
+The emulator still runs in Docker (it's a container-only release), but the
+FastAPI process runs directly on your machine for faster iteration.
+
 ```bash
-# 1. Install MongoDB locally or use Docker for just the DB:
-docker run -d -p 27017:27017 --name dharma_mongo mongo:7.0
+# 1. Start only the Cosmos DB Emulator container (no api container)
+docker-compose up -d cosmos-emulator
+
+# Wait for it to be healthy (takes 60-120 s on first run):
+docker-compose logs -f cosmos-emulator
+# Look for: "Started" or until https://localhost:8081/_explorer/index.html loads
 
 # 2. Create a virtual environment
-python3.12 -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # 3. Install dependencies
 pip install -r requirements.txt
 
 # 4. Configure environment
 cp .env.example .env
-# Edit .env if needed (defaults point to localhost:27017)
+# The default MONGODB_URL in .env.example already points to localhost:10255
+# (the emulator's MongoDB endpoint) — no edits needed.
 
 # 5. Start the server with hot-reload
 uvicorn app.main:app --reload --port 8000
@@ -246,8 +260,9 @@ docker-compose exec api python -m scripts.seed_data
 # Bare metal
 python -m scripts.seed_data
 
-# Against a remote database
-MONGODB_URL="mongodb+srv://..." python -m scripts.seed_data
+# Against a remote Cosmos DB (e.g. staging) — pass its connection string directly
+MONGODB_URL="mongodb://accountname:key@account.mongo.cosmos.azure.com:10255/dharma_db?ssl=true&replicaSet=globaldb&retrywrites=false" \
+  python -m scripts.seed_data
 ```
 
 The script is **idempotent** — re-running it skips existing documents without creating duplicates.
@@ -468,8 +483,8 @@ jobs:
 | `APP_NAME` | No | `Dharma AI Backend` | Shown in API docs |
 | `APP_VERSION` | No | `1.0.0` | Shown in `/health` and docs |
 | `DEBUG` | No | `false` | Enables verbose logging |
-| `MONGODB_URL` | Local only | `mongodb://localhost:27017` | Ignored in production |
-| `DATABASE_NAME` | No | `dharma_db` | MongoDB database name |
+| `MONGODB_URL` | Local only | Cosmos DB Emulator URI (localhost:10255) | Ignored in production — Key Vault supplies the URI instead |
+| `DATABASE_NAME` | No | `dharma_db` | Cosmos DB database name |
 | `JWT_SECRET_KEY` | **Yes** | *(weak dev default)* | HS256 signing key — **change in prod** |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `10080` | Token TTL (7 days) |
@@ -537,7 +552,7 @@ def get_ai_engine() -> AIEngine:
 ### Authentication Flow
 
 ```
-Mobile App                    Backend                        MongoDB
+Mobile App                    Backend                        Cosmos DB
     │                            │                               │
     │── POST /auth/request-otp ──►│                               │
     │                            │── (Send OTP via SMS) ─────────►│
@@ -554,7 +569,7 @@ Mobile App                    Backend                        MongoDB
 
 ```json
 {
-  "sub": "60d5ecb8f7c3a4e5f0a1b2c3",   // MongoDB ObjectId of User
+  "sub": "60d5ecb8f7c3a4e5f0a1b2c3",   // Cosmos DB document _id of the User
   "iat": 1720000000,                    // Issued at (Unix timestamp)
   "exp": 1720604800                     // Expires 7 days later
 }
