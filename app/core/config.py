@@ -11,6 +11,19 @@ Environment strategy:
                          Azure Key Vault using DefaultAzureCredential
                          (Managed Identity on Azure Container Apps).
                          Zero hardcoded credentials in production.
+
+User-assigned Managed Identity (UMSI) requirement:
+  When using a user-assigned managed identity (as opposed to a system-assigned
+  one), AZURE_CLIENT_ID must be set to the client ID of the UMSI.
+  DefaultAzureCredential cannot infer which identity to use when multiple are
+  available — setting AZURE_CLIENT_ID tells the SDK exactly which one to use.
+
+  Retrieve the client ID via:
+    az identity show --name <umsi-name> --resource-group <rg> --query clientId -o tsv
+
+  Set it as an environment variable on the Container App:
+    az containerapp update --name <app> --resource-group <rg> \\
+      --set-env-vars AZURE_CLIENT_ID=<client-id>
 """
 
 from enum import Enum
@@ -66,6 +79,19 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "dharma_db"
 
+    # ── Azure Managed Identity ────────────────────────────────────────────────
+    # Required when using a user-assigned managed identity (UMSI).
+    # DefaultAzureCredential reads this automatically — no extra code needed.
+    # Retrieve with: az identity show --name <umsi> --query clientId -o tsv
+    AZURE_CLIENT_ID: str = Field(
+        default="",
+        description=(
+            "Client ID of the user-assigned managed identity. "
+            "Required in production — DefaultAzureCredential uses this to "
+            "select the correct UMSI when multiple identities are available."
+        ),
+    )
+
     # ── Azure Key Vault (used in production) ──────────────────────────────────
     AZURE_KEY_VAULT_URL: str = Field(
         default="",
@@ -110,7 +136,13 @@ class Settings(BaseSettings):
                 "AZURE_KEY_VAULT_URL must be set when APP_ENV=production."
             )
 
-        credential = DefaultAzureCredential()
+        # Pass managed_identity_client_id explicitly so DefaultAzureCredential
+        # always targets the correct UMSI (dharma-env-umsi).  Without this,
+        # the SDK cannot resolve which user-assigned identity to use and the
+        # token request fails with invalid_scope.
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=self.AZURE_CLIENT_ID or None,
+        )
         secret_client = SecretClient(
             vault_url=self.AZURE_KEY_VAULT_URL,
             credential=credential,
