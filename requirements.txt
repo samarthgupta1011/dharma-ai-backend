@@ -1,0 +1,25 @@
+# ── Web Framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1          # ASGI server (includes websockets + httptools)
+
+# ── Database (MongoDB / Cosmos DB) ────────────────────────────────────────────
+beanie==1.27.0                     # Async ODM built on Motor + Pydantic v2
+motor==3.6.0                       # Async MongoDB driver (wraps PyMongo)
+pymongo==4.10.1                    # Required by motor for IndexModel etc.
+
+# ── Data Validation & Settings ────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.6.1           # BaseSettings with .env file support
+
+# ── Authentication ────────────────────────────────────────────────────────────
+PyJWT==2.10.1                      # HS256 JWT encode / decode
+
+# ── Azure SDK (production only — harmless to install in dev) ──────────────────
+azure-identity==1.19.0             # DefaultAzureCredential (Managed Identity)
+azure-keyvault-secrets==4.9.0      # SecretClient for Key Vault access
+
+# ── HTTP Client (for optional outbound calls, e.g. SMS provider) ──────────────
+httpx==0.28.1
+
+# ── Multipart form data ───────────────────────────────────────────────────────
+python-multipart==0.0.20
