@@ -21,6 +21,13 @@
 
 ## 1. Architecture Overview
 
+**Local development**
+```
+React Native App  ──►  FastAPI (localhost:8000)  ──►  MongoDB 6.0 (localhost:27017)
+                         └── docker-compose up            └── docker container (mongo:6.0)
+```
+
+**Production (Azure)**
 ```
 React Native App
        │  HTTPS
@@ -41,7 +48,7 @@ Azure Container Apps  ←──────────────────�
             │                                                   │
             ▼                                                   │
   Azure Cosmos DB                           Azure Key Vault ────┘
-  (API for MongoDB)                    (Managed Identity fetch)
+  (API for MongoDB v6.0)               (Managed Identity fetch)
             │
   Azure Blob Storage
   (Media: GIFs, Audio)
@@ -87,7 +94,7 @@ dharma-ai-backend/
 ├── scripts/
 │   └── seed_data.py              # Populates local DB with sample data
 ├── .env.example                  # Variable reference — copy to .env
-├── docker-compose.yml            # Local dev: Cosmos DB Emulator + API with hot-reload
+├── docker-compose.yml            # Local dev: MongoDB 6.0 + API with hot-reload
 ├── Dockerfile                    # Multi-stage production image
 ├── requirements.txt
 └── README.md
@@ -163,15 +170,12 @@ cd dharma-ai-backend
 
 # 2. Create your local environment file
 cp .env.example .env
-# No changes needed for local development — defaults work out of the box.
+# No changes needed — defaults work out of the box.
 
-# 3. Start Cosmos DB Emulator + API
-#    ⚠️  First run pulls a ~2 GB image and the emulator takes 60-120 s to initialise.
-#    Watch startup progress in a second terminal while this runs:
-#      docker-compose logs -f cosmos-emulator
+# 3. Start MongoDB 6.0 + API with hot-reload
 docker-compose up -d
 
-# 4. Verify the server is running (only succeeds once the emulator is healthy)
+# 4. Verify the server is running
 curl http://localhost:8000/health
 # → {"status":"ok","service":"Dharma AI Backend","version":"1.0.0","environment":"local"}
 
@@ -180,31 +184,24 @@ docker-compose exec api python -m scripts.seed_data
 
 # 6. Open interactive API docs
 open http://localhost:8000/docs
-
-# Optional: open the Cosmos DB Data Explorer (accept the self-signed cert prompt)
-open https://localhost:8081/_explorer/index.html
 ```
 
 **Useful commands:**
 ```bash
-docker-compose logs -f api                # Tail API logs
-docker-compose logs -f cosmos-emulator    # Tail Cosmos DB Emulator logs
-docker-compose restart api                # Restart after config changes
-docker-compose down -v                    # Stop and wipe all data
+docker-compose logs -f api        # Tail API logs
+docker-compose logs -f mongo      # Tail MongoDB logs
+docker-compose restart api        # Restart after config changes
+docker-compose down -v            # Stop and wipe all data
 ```
 
-### Option B — Bare Metal (No Docker)
+### Option B — Bare Metal (No Docker for the API)
 
-The emulator still runs in Docker (it's a container-only release), but the
-FastAPI process runs directly on your machine for faster iteration.
+MongoDB still runs in Docker, but the FastAPI process runs directly on your
+machine for faster iteration cycles.
 
 ```bash
-# 1. Start only the Cosmos DB Emulator container (no api container)
-docker-compose up -d cosmos-emulator
-
-# Wait for it to be healthy (takes 60-120 s on first run):
-docker-compose logs -f cosmos-emulator
-# Look for: "Started" or until https://localhost:8081/_explorer/index.html loads
+# 1. Start only the MongoDB container
+docker-compose up -d mongo
 
 # 2. Create a virtual environment
 python3 -m venv .venv
@@ -215,8 +212,7 @@ pip install -r requirements.txt
 
 # 4. Configure environment
 cp .env.example .env
-# The default MONGODB_URL in .env.example already points to localhost:10255
-# (the emulator's MongoDB endpoint) — no edits needed.
+# MONGODB_URL defaults to mongodb://localhost:27017 — no edits needed.
 
 # 5. Start the server with hot-reload
 uvicorn app.main:app --reload --port 8000
@@ -483,7 +479,7 @@ jobs:
 | `APP_NAME` | No | `Dharma AI Backend` | Shown in API docs |
 | `APP_VERSION` | No | `1.0.0` | Shown in `/health` and docs |
 | `DEBUG` | No | `false` | Enables verbose logging |
-| `MONGODB_URL` | Local only | Cosmos DB Emulator URI (localhost:10255) | Ignored in production — Key Vault supplies the URI instead |
+| `MONGODB_URL` | Local only | `mongodb://localhost:27017` | Local MongoDB (docker-compose). Ignored in production — Key Vault supplies the Cosmos DB URI instead |
 | `DATABASE_NAME` | No | `dharma_db` | Cosmos DB database name |
 | `JWT_SECRET_KEY` | **Yes** | *(weak dev default)* | HS256 signing key — **change in prod** |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |

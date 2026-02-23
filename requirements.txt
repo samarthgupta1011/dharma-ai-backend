@@ -2,10 +2,12 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1          # ASGI server (includes websockets + httptools)
 
-# ── Database (MongoDB / Cosmos DB) ────────────────────────────────────────────
+# ── Database (Cosmos DB via MongoDB-compatible API) ────────────────────────────
 beanie==1.27.0                     # Async ODM built on Motor + Pydantic v2
-motor==3.6.0                       # Async MongoDB driver (wraps PyMongo)
-pymongo==4.10.1                    # Required by motor for IndexModel etc.
+motor==3.6.0                       # Async Cosmos DB driver (wraps PyMongo)
+# pymongo is intentionally unpinned — motor 3.6.0 requires pymongo>=4.9,<4.10
+# and will pull in the correct version automatically as a transitive dependency.
+pymongo>=4.9,<4.10                 # Constrained by motor 3.6.0; IndexModel is here
 
 # ── Data Validation & Settings ────────────────────────────────────────────────
 pydantic==2.10.3

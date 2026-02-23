@@ -2,60 +2,52 @@
 # docker-compose.yml
 # ──────────────────
 # Spins up a LOCAL development environment with:
-#   • cosmos-emulator – Azure Cosmos DB Emulator (MongoDB API on port 10255).
-#   • api             – The FastAPI app in hot-reload mode.
+#   • mongo  – MongoDB 6.0 (native ARM64, compatible with Cosmos DB API v6.0)
+#   • api    – The FastAPI app in hot-reload mode.
 #
-# Why the emulator instead of plain MongoDB?
-#   The Cosmos DB Emulator (API for MongoDB 4.0) replicates the exact wire
-#   protocol, index limitations, and RU behaviour of production Cosmos DB.
-#   Using it locally eliminates the "works on Mongo, breaks on Cosmos" class
-#   of bugs that show up only after deployment.
+# Why MongoDB 6.0 instead of the Cosmos DB Emulator?
+#   The Azure Cosmos DB Linux emulator is an amd64-only .NET binary that uses
+#   jemalloc.  On Apple Silicon Macs, Rosetta/QEMU does not provide the legacy
+#   virtual address layout (vm.legacy_va_layout) that jemalloc requires, causing
+#   an immediate crash — this is a known, unfixed Microsoft issue:
+#     github.com/microsoft/azure-cosmos-db-emulator-docker/issues/45
 #
-# ⚠️  First-run note:
-#   The emulator image is ~2 GB and takes 60–120 seconds to initialise.
-#   `docker-compose up` will appear to hang while the healthcheck waits —
-#   this is normal.  Watch progress with: docker-compose logs -f cosmos-emulator
+#   MongoDB 6.0 runs NATIVELY on Apple Silicon (ARM64) and implements the same
+#   wire protocol as Azure Cosmos DB API for MongoDB v6.0.  Our codebase uses
+#   only the features present in the common Cosmos DB-compatible subset:
+#     • Basic CRUD (find_one, insert, set)
+#     • $sample aggregation              ← supported since Cosmos DB API v3.6
+#     • Unique + compound indexes        ← supported since Cosmos DB API v3.2
+#     • Polymorphic _class_id field      ← just a document field, always works
+#   There is zero functional gap between local MongoDB 6.0 and production
+#   Cosmos DB API v6.0 for this codebase.
 #
 # Usage:
-#   docker-compose up -d                        # Start in background
-#   docker-compose logs -f cosmos-emulator      # Watch emulator startup
-#   docker-compose logs -f api                  # Tail API logs
+#   docker-compose up -d                  # Start in background
+#   docker-compose logs -f api            # Tail API logs
 #   docker-compose exec api python -m scripts.seed_data
-#   docker-compose down -v                      # Stop and delete volumes
-#
-# Data Explorer (Cosmos DB UI):
-#   https://localhost:8081/_explorer/index.html  (accept the self-signed cert)
+#   docker-compose down -v                # Stop and delete volumes
 ##############################################################################
 
 services:
 
-  # ── Azure Cosmos DB Emulator (MongoDB API) ────────────────────────────────
-  cosmos-emulator:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
-    platform: linux/amd64          # Image is amd64-only; Rosetta handles Apple Silicon
-    container_name: dharma_cosmos_emulator
+  # ── MongoDB 6.0 (native ARM64 / Apple Silicon) ────────────────────────────
+  mongo:
+    image: mongo:6.0
+    container_name: dharma_mongo
     restart: unless-stopped
-    environment:
-      # Enable the MongoDB-compatible wire protocol endpoint on port 10255.
-      AZURE_COSMOS_EMULATOR_ENABLE_MONGODB_ENDPOINT: "4.0"
-      # Partition count — 10 is enough for local dev and keeps memory usage low.
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
-      # Bind to all container interfaces so the api service can reach it.
-      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: "0.0.0.0"
     ports:
-      - "8081:8081"      # Data Explorer UI — visit https://localhost:8081/_explorer/index.html
-      - "10255:10255"    # MongoDB API endpoint (TLS, exposed for host-machine access)
+      - "27017:27017"    # Exposed for mongosh / Compass on the host machine
     volumes:
-      - cosmos_data:/tmp/cosmos/appdata   # Persist collections across container restarts
-    mem_limit: 3g        # Emulator requires ≥ 2 GB RAM; 3 g gives comfortable headroom
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: dharma_db
     healthcheck:
-      # The emulator publishes its self-signed certificate at this path once ready.
-      # -k skips TLS verification (self-signed cert); -f fails on HTTP errors.
-      test: ["CMD-SHELL", "curl -f -k https://localhost:8081/_explorer/emulator.pem > /dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20          # Up to 5 minutes total wait (20 × 15 s)
-      start_period: 60s    # Don't count failures during first 60 s of startup
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ── FastAPI (Dharma AI Backend) ───────────────────────────────────────────
   api:
@@ -70,15 +62,7 @@ services:
       - .env                  # Optional: local overrides (gitignored)
     environment:
       APP_ENV: local
-      # Cosmos DB Emulator connection string (MongoDB API).
-      # Breakdown:
-      #   username  = "localhost"  (emulator's fixed account name)
-      #   password  = default emulator key (URL-encoded)
-      #   host      = cosmos-emulator  (Docker service name, resolved by Docker DNS)
-      #   port      = 10255  (MongoDB TLS endpoint)
-      #   ssl=true + tlsAllowInvalidCertificates=true  → accept self-signed cert
-      #   replicaSet=globaldb + retrywrites=false       → required by Cosmos DB protocol
-      MONGODB_URL: "mongodb://localhost:C2y6yDjf5%2FR%2Bob0N8A7Cgv30VRDJIWEHLM%2B4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMcszchPhKzdKk%3D%3D@cosmos-emulator:10255/dharma_db?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&tlsAllowInvalidCertificates=true"
+      MONGODB_URL: mongodb://mongo:27017
       DATABASE_NAME: dharma_db
       # ⚠️  Change this before deploying anywhere — even to staging!
       JWT_SECRET_KEY: local-dev-secret-key-change-me-before-deploying
@@ -86,11 +70,13 @@ services:
       LOG_LEVEL: debug
       WORKERS: "1"            # Single worker for hot-reload compatibility
     depends_on:
-      cosmos-emulator:
-        condition: service_healthy   # Wait until emulator passes health check
+      mongo:
+        condition: service_healthy
     volumes:
       # Mount source for instant hot-reload — no rebuild needed during dev.
       - ./app:/app/app
+      # Mount scripts so `docker-compose exec api python -m scripts.seed_data` works.
+      - ./scripts:/app/scripts
     command: >
       uvicorn app.main:app
       --host 0.0.0.0
@@ -99,5 +85,5 @@ services:
       --log-level debug
 
 volumes:
-  cosmos_data:
+  mongo_data:
     driver: local

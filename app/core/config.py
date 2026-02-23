@@ -54,22 +54,16 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # ── Local Cosmos DB Emulator (only used when APP_ENV=local) ──────────────
-    # Default points to the emulator running on the host machine (localhost:10255).
-    # When running inside docker-compose, this is overridden by the MONGODB_URL
-    # environment variable in docker-compose.yml (host = cosmos-emulator:10255).
+    # ── Local MongoDB (only used when APP_ENV=local) ──────────────────────────
+    # In local development we connect to MongoDB 6.0 running in docker-compose.
+    # MongoDB 6.0 implements the same wire protocol as Azure Cosmos DB API for
+    # MongoDB v6.0, so local and production behaviour are identical for all
+    # features this codebase uses ($sample, unique/compound indexes, CRUD).
     #
-    # Connection string anatomy:
-    #   username  = "localhost"  ← emulator's fixed account name (not a hostname)
-    #   password  = default emulator master key (URL-encoded special chars)
-    #   host:port = localhost:10255  ← MongoDB TLS endpoint
-    #   ssl=true + tlsAllowInvalidCertificates=true  ← emulator uses self-signed cert
-    #   replicaSet=globaldb + retrywrites=false       ← required by Cosmos DB protocol
-    MONGODB_URL: str = (
-        "mongodb://localhost:C2y6yDjf5%2FR%2Bob0N8A7Cgv30VRDJIWEHLM%2B4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMcszchPhKzdKk%3D%3D"
-        "@localhost:10255/dharma_db"
-        "?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&tlsAllowInvalidCertificates=true"
-    )
+    # When running inside docker-compose, this is overridden by the MONGODB_URL
+    # env var set in docker-compose.yml (mongodb://mongo:27017 — Docker DNS).
+    # When running bare-metal the default below (localhost:27017) is used.
+    MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "dharma_db"
 
     # ── Azure Key Vault (used in production) ──────────────────────────────────
