@@ -326,6 +326,14 @@ az keyvault secret set \
   --name "cosmos-db-connection-string" \
   --value "$COSMOS_CONN"
 
+# Store the JWT secret in Key Vault (generated at runtime by the app)
+JWT_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+az keyvault secret set \
+  --vault-name $KEYVAULT_NAME \
+  --name "jwt-secret-key" \
+  --value "$JWT_KEY"
+
 # Container Apps Environment
 az containerapp env create \
   --resource-group $RESOURCE_GROUP \
@@ -409,18 +417,23 @@ az role assignment create \
 echo "✅ Managed Identity configured. The app will authenticate to Azure without any credentials in code."
 ```
 
-### Step 5 — Store JWT Secret in Container Apps
+### Step 5 — Configure Container App Env Variables
 
 ```bash
-# Store the JWT signing key as a Container App secret (encrypted at rest)
-JWT_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+# Set production environment variables on Container App
+# (secrets like connection strings are NOT stored here — fetched from Key Vault at runtime)
 
-az containerapp secret set \
+az containerapp update \
   --name $CONTAINER_APP_NAME \
   --resource-group $RESOURCE_GROUP \
-  --secrets jwt-secret-key="$JWT_KEY"
+  --set-env-vars \
+    APP_ENV=production \
+    AZURE_KEY_VAULT_URL="https://$KEYVAULT_NAME.vault.azure.net/" \
+    AZURE_CLIENT_ID=$(az identity show --name $MANAGED_IDENTITY --resource-group $RESOURCE_GROUP --query clientId -o tsv) \
+    COSMOS_DB_SECRET_NAME="cosmos-db-connection-string" \
+    JWT_SECRET_NAME="jwt-secret-key"
 
-echo "JWT_SECRET_KEY stored as Container App secret."
+echo "✅ Container App environment variables configured."
 ```
 
 ### Step 6 — Verify Deployment
@@ -479,13 +492,15 @@ jobs:
 | `APP_NAME` | No | `Dharma AI Backend` | Shown in API docs |
 | `APP_VERSION` | No | `1.0.0` | Shown in `/health` and docs |
 | `DEBUG` | No | `false` | Enables verbose logging |
-| `MONGODB_URL` | Local only | `mongodb://localhost:27017` | Local MongoDB (docker-compose). Ignored in production — Key Vault supplies the Cosmos DB URI instead |
+| `MONGODB_URL` | Local only | `mongodb://localhost:27017` | Local MongoDB (docker-compose). In production, fetched from Key Vault |
 | `DATABASE_NAME` | No | `dharma_db` | Cosmos DB database name |
-| `JWT_SECRET_KEY` | **Yes** | *(weak dev default)* | HS256 signing key — **change in prod** |
+| `JWT_SECRET_KEY` | Local only | *(weak dev default)* | HS256 signing key. In production, fetched from Key Vault (secret name: `jwt-secret-key`) |
+| `JWT_SECRET_NAME` | Prod only | `jwt-secret-key` | Name of the Key Vault secret containing JWT signing key |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `10080` | Token TTL (7 days) |
-| `AZURE_KEY_VAULT_URL` | Prod only | `""` | Key Vault URI |
-| `COSMOS_DB_SECRET_NAME` | Prod only | `cosmos-db-connection-string` | Secret name in Key Vault |
+| `AZURE_KEY_VAULT_URL` | Prod only | `""` | Key Vault URI (e.g., `https://dharma-kv.vault.azure.net/`) |
+| `COSMOS_DB_SECRET_NAME` | Prod only | `cosmos-db-connection-string` | Name of the Key Vault secret containing Cosmos DB connection string |
+| `AZURE_CLIENT_ID` | Prod only | `""` | Client ID of the user-assigned managed identity |
 | `AZURE_STORAGE_ACCOUNT_URL` | Prod only | `""` | Blob Storage URL |
 | `AZURE_STORAGE_CONTAINER` | No | `dharma-media` | Blob container name |
 | `ALLOWED_ORIGINS` | No | `["*"]` | CORS allow-list |
@@ -576,7 +591,7 @@ Mobile App                    Backend                        Cosmos DB
 | Secret | How it's managed |
 |---|---|
 | Cosmos DB connection string | Azure Key Vault secret, fetched at startup via Managed Identity |
-| JWT signing key | Azure Container Apps secret (encrypted at rest), injected as env var |
+| JWT signing key | Azure Key Vault secret, fetched at startup via Managed Identity |
 | OTP values | Redis (Azure Cache for Redis) with 10-minute TTL — never persisted to DB |
 
-The application process **never handles** raw Azure credentials.  `DefaultAzureCredential` uses the Container App's system-assigned Managed Identity token endpoint (available at `http://169.254.169.254/metadata/identity/...`) which Azure infrastructure manages entirely.
+The application process **never handles** raw Azure credentials. `DefaultAzureCredential` uses the Container App's Managed Identity token endpoint (available at `http://169.254.169.254/metadata/identity/...`) which Azure infrastructure manages entirely. Both secrets are fetched from Key Vault during the `@model_validator` phase in `config.py`, before the app starts serving requests.

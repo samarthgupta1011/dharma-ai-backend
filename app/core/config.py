@@ -30,7 +30,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,7 +62,11 @@ class Settings(BaseSettings):
     # ── JWT ───────────────────────────────────────────────────────────────────
     JWT_SECRET_KEY: str = Field(
         default="change-me-in-production-must-be-at-least-32-characters",
-        description="HS256 signing key. Injected via Key Vault in production.",
+        description="HS256 signing key. Fetched from Key Vault in production.",
+    )
+    JWT_SECRET_NAME: str = Field(
+        default="jwt-secret-key",
+        description="Name of the Key Vault secret that holds the JWT signing key.",
     )
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
@@ -110,6 +114,23 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONTAINER: str = "dharma-media"
 
     # ── CORS ──────────────────────────────────────────────────────────────────
+    @model_validator(mode="after")
+    def load_secrets_from_akv(self) -> "Settings":
+        """
+        In production, fetch sensitive secrets from Azure Key Vault.
+        This runs after all fields are initialized from environment variables.
+        In local mode, env vars are used directly.
+        """
+        if self.APP_ENV == AppEnvironment.PRODUCTION:
+        After load_secrets_from_akv() runs in production, this simply returns
+        the value already fetched from Key Vault. In local mode, returns the
+        environment variable directly.
+        """
+        return self.MONGODB_URLAME}' from Key Vault: {e}"
+                ) from e
+
+        return self
+
     ALLOWED_ORIGINS: List[str] = ["*"]
 
     # ─────────────────────────────────────────────────────────────────────────
