@@ -7,170 +7,39 @@
 
 ## Table of Contents
 
-1. [Architecture Overview](#1-architecture-overview)
-2. [Project Structure](#2-project-structure)
-3. [API Reference](#3-api-reference)
-4. [Local Development](#4-local-development)
-5. [Database Seeding](#5-database-seeding)
-6. [Deployment to Azure](#6-deployment-to-azure)
-7. [Environment Variables](#7-environment-variables)
-8. [AI Engine Strategy Pattern](#8-ai-engine-strategy-pattern)
-9. [Security Model](#9-security-model)
+1. [API Reference](#3-api-reference)
+2. [Local Development](#4-local-development)
+3. [Database Seeding](#5-database-seeding)
+4. [Deployment to Azure](#6-deployment-to-azure)
+5. [Environment Variables](#7-environment-variables)
+6. [AI Engine Strategy Pattern](#8-ai-engine-strategy-pattern)
+7. [Security Model](#9-security-model)
 
 ---
 
-## 1. Architecture Overview
-
-**Local development**
-```
-React Native App  ──►  FastAPI (localhost:8000)  ──►  MongoDB 6.0 (localhost:27017)
-                         └── docker-compose up            └── docker container (mongo:6.0)
-```
-
-**Production (Azure)**
-```
-React Native App
-       │  HTTPS
-       ▼
-Azure Container Apps  ←──────────────────────────────────────┐
-  ┌─────────────────────────────────────────────────────────┐ │
-  │  FastAPI (Python 3.12)                                  │ │
-  │  ┌──────────────────────────────────────────────────┐   │ │
-  │  │  Routes: /auth  /users  /recipe  /cosmic         │   │ │
-  │  │          /stories  /metadata                     │   │ │
-  │  └──────────────────────────────────────────────────┘   │ │
-  │  ┌──────────────┐   ┌───────────────────────────────┐   │ │
-  │  │ Beanie ODM   │   │ AI Engine (Strategy Pattern)  │   │ │
-  │  │ (Motor async)│   │  MockAIEngine (dev)           │   │ │
-  │  └──────┬───────┘   │  ClaudeAIEngine (prod)        │   │ │
-  │         │           └───────────────────────────────┘   │ │
-  └─────────┼───────────────────────────────────────────────┘ │
-            │                                                   │
-            ▼                                                   │
-  Azure Cosmos DB                           Azure Key Vault ────┘
-  (API for MongoDB v6.0)               (Managed Identity fetch)
-            │
-  Azure Blob Storage
-  (Media: GIFs, Audio)
-```
-
-### Key Architectural Decisions
-
-| Decision | Rationale |
-|---|---|
-| **FastAPI** | Native async support, auto OpenAPI docs, excellent DI system, Python type hints |
-| **Beanie / Motor** | Async ODM for Cosmos DB (MongoDB-compatible API). Pydantic v2 models mean one schema for DB + API validation |
-| **Polymorphic ingredients** | All activity types in one collection enables cross-type queries and simplifies the AI matching layer |
-| **Strategy Pattern for AI** | Swap `MockAIEngine → ClaudeAIEngine` with a single line change, zero route rewrites |
-| **Azure Managed Identity** | No credentials in code or environment variables in production. Eliminates an entire class of secrets-management bugs |
-| **`GET /metadata/configs`** | Single source of truth for enums. Frontend never drifts out of sync with backend enum additions |
-
----
-
-## 2. Project Structure
-
-```
-dharma-ai-backend/
-├── app/
-│   ├── main.py                   # FastAPI factory, lifespan, CORS, router mount
-│   ├── api/
-│   │   ├── dependencies.py       # get_current_user (JWT), get_ai_engine (DI)
-│   │   └── routes/
-│   │       ├── auth.py           # POST /auth/request-otp, /auth/verify-otp
-│   │       ├── users.py          # GET/PUT /users/me, POST /users/me/streak/increment
-│   │       ├── recipe.py         # GET /recipe
-│   │       ├── cosmic.py         # GET /cosmic
-│   │       ├── stories.py        # GET /stories/shuffle
-│   │       └── metadata.py       # GET /metadata/configs
-│   ├── core/
-│   │   ├── config.py             # Pydantic BaseSettings + Azure Key Vault resolver
-│   │   └── security.py           # JWT create / decode
-│   ├── models/
-│   │   ├── user.py               # User document + UserStats embedded doc
-│   │   ├── ingredients.py        # BaseIngredient + 6 polymorphic subclasses
-│   │   └── panchang.py           # DailyPanchang document
-│   └── services/
-│       └── ai_service.py         # AIEngine ABC + MockAIEngine
-├── scripts/
-│   └── seed_data.py              # Populates local DB with sample data
-├── .env.example                  # Variable reference — copy to .env
-├── docker-compose.yml            # Local dev: MongoDB 6.0 + API with hot-reload
-├── Dockerfile                    # Multi-stage production image
-├── requirements.txt
-└── README.md
-```
-
----
-
-## 3. API Reference
+## 1. API Reference
 
 All endpoints are available via interactive docs at `http://localhost:8000/docs` (Swagger UI) or `http://localhost:8000/redoc` (ReDoc) when the server is running.
 
-### Authentication
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/auth/request-otp` | None | Send OTP to mobile number |
-| `POST` | `/auth/verify-otp` | None | Verify OTP, get JWT + `is_new_user` flag |
-
-**Mock OTP:** In local mode the OTP is always `123456`.
-
-### Users
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/users/me` | JWT | Fetch authenticated user's profile |
-| `PUT` | `/users/me` | JWT | Update profile fields (partial update) |
-| `POST` | `/users/me/streak/increment` | JWT | Record today's activity, update streak |
-
-### Content
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/recipe?mood=anxious&feelings=...` | JWT | AI-personalised ingredient recipe |
-| `GET` | `/cosmic?city=Mumbai&date=2025-01-14` | None | Panchang for city + date |
-| `GET` | `/stories/shuffle?count=3` | None | Random story selection |
-| `GET` | `/metadata/configs` | None | All enums for frontend sync |
-| `GET` | `/health` | None | Liveness probe |
-
-### Example: Full Auth + Recipe Flow
-
-```bash
-# 1. Request OTP
-curl -X POST http://localhost:8000/auth/request-otp \
-  -H "Content-Type: application/json" \
-  -d '{"mobile": "+919876543210"}'
-
-# 2. Verify OTP (use 123456 in dev mode)
-curl -X POST http://localhost:8000/auth/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{"mobile": "+919876543210", "otp": "123456"}'
-# → { "access_token": "eyJ...", "is_new_user": true }
-
-# 3. Use the token to get a personalised recipe
-curl "http://localhost:8000/recipe?mood=anxious&feelings=Work+deadlines+piling+up" \
-  -H "Authorization: Bearer eyJ..."
-```
-
 ---
 
-## 4. Local Development
+## 2. Local Development
 
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) ≥ 4.x
 - Python 3.12+ (optional — only needed for running without Docker)
 
-### Option A — Docker Compose (Recommended)
+### Docker Compose (Recommended)
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/your-org/dharma-ai-backend.git
 cd dharma-ai-backend
 
-# 2. Create your local environment file
+# 2. Copy environment template and update with your local values
 cp .env.example .env
-# No changes needed — defaults work out of the box.
+# Edit .env if needed (defaults work out of the box for local dev)
 
 # 3. Start MongoDB 6.0 + API with hot-reload
 docker-compose up -d
@@ -194,33 +63,6 @@ docker-compose restart api        # Restart after config changes
 docker-compose down -v            # Stop and wipe all data
 ```
 
-### Option B — Bare Metal (No Docker for the API)
-
-MongoDB still runs in Docker, but the FastAPI process runs directly on your
-machine for faster iteration cycles.
-
-```bash
-# 1. Start only the MongoDB container
-docker-compose up -d mongo
-
-# 2. Create a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# MONGODB_URL defaults to mongodb://localhost:27017 — no edits needed.
-
-# 5. Start the server with hot-reload
-uvicorn app.main:app --reload --port 8000
-
-# 6. Seed the database
-python -m scripts.seed_data
-```
-
 ### How `APP_ENV=local` Bypasses Azure
 
 The `get_mongodb_url()` method in `app/core/config.py` checks `APP_ENV`:
@@ -240,7 +82,7 @@ The Azure SDK packages (`azure-identity`, `azure-keyvault-secrets`) are installe
 
 ---
 
-## 5. Database Seeding
+## 3. Database Seeding
 
 The seed script (`scripts/seed_data.py`) inserts:
 
@@ -265,7 +107,7 @@ The script is **idempotent** — re-running it skips existing documents without 
 
 ---
 
-## 6. Deployment to Azure
+## 4. Deployment to Azure
 
 ### Prerequisites
 
@@ -351,9 +193,34 @@ az acr build \
   .
 ```
 
-### Step 3 — Deploy to Azure Container Apps
+### Step 3 — Create Managed Identity
 
 ```bash
+# Create a user-assigned managed identity
+# This identity will authenticate the Container App to Azure Key Vault
+MANAGED_IDENTITY="dharma-env-umsi"
+
+az identity create \
+  --name $MANAGED_IDENTITY \
+  --resource-group $RESOURCE_GROUP \
+  --location $LOCATION
+
+# Get its client ID (needed for Container App deployment)
+UMSI_CLIENT_ID=$(az identity show \
+  --name $MANAGED_IDENTITY \
+  --resource-group $RESOURCE_GROUP \
+  --query clientId -o tsv)
+
+echo "✅ Managed Identity created: $MANAGED_IDENTITY"
+echo "   Client ID: $UMSI_CLIENT_ID"
+```
+
+### Step 4 — Deploy Container App with prod.env
+
+```bash
+# Create the Container App and load all configuration from prod.env
+# Only AZURE_CLIENT_ID is set separately (instance-specific UMSI reference)
+
 az containerapp create \
   --name $CONTAINER_APP_NAME \
   --resource-group $RESOURCE_GROUP \
@@ -366,32 +233,24 @@ az containerapp create \
   --max-replicas 10 \
   --cpu 0.5 \
   --memory 1.0Gi \
-  --env-vars \
-      APP_ENV=production \
-      DATABASE_NAME=dharma_db \
-      AZURE_KEY_VAULT_URL="https://$KEYVAULT_NAME.vault.azure.net/" \
-      COSMOS_DB_SECRET_NAME=cosmos-db-connection-string \
-      JWT_SECRET_KEY=secretref:jwt-secret-key \   # ← Stored in Container App secrets
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES=10080
+  --user-assigned $MANAGED_IDENTITY \
+  --env-vars-from-file prod.env \
+  --set-env-vars AZURE_CLIENT_ID="$UMSI_CLIENT_ID"
+
+echo "✅ Container App created with prod.env + AZURE_CLIENT_ID"
 ```
 
-### Step 4 — Assign Managed Identity
+### Step 5 — Configure RBAC (Managed Identity Permissions)
 
 ```bash
-# Enable System-Assigned Managed Identity on the Container App
-az containerapp identity assign \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --system-assigned
+# Grant the UMSI permissions to access Azure Key Vault and Cosmos DB
 
-# Get the identity's Principal ID
-PRINCIPAL_ID=$(az containerapp identity show \
-  --name $CONTAINER_APP_NAME \
+PRINCIPAL_ID=$(az identity show \
+  --name $MANAGED_IDENTITY \
   --resource-group $RESOURCE_GROUP \
   --query principalId -o tsv)
 
-# Grant the identity "Key Vault Secrets User" role
-# (allows reading secrets, not listing/managing them — principle of least privilege)
+# Grant "Key Vault Secrets User" — allows reading secrets from AKV
 KEYVAULT_ID=$(az keyvault show \
   --name $KEYVAULT_NAME \
   --resource-group $RESOURCE_GROUP \
@@ -402,8 +261,7 @@ az role assignment create \
   --role "Key Vault Secrets User" \
   --scope $KEYVAULT_ID
 
-# Grant the identity "Cosmos DB Account Reader Role"
-# (allows the app to verify DB access, though connection is via the URI in Key Vault)
+# Grant "Cosmos DB Account Reader Role"
 COSMOS_ID=$(az cosmosdb show \
   --name $COSMOS_ACCOUNT \
   --resource-group $RESOURCE_GROUP \
@@ -414,26 +272,7 @@ az role assignment create \
   --role "Cosmos DB Account Reader Role" \
   --scope $COSMOS_ID
 
-echo "✅ Managed Identity configured. The app will authenticate to Azure without any credentials in code."
-```
-
-### Step 5 — Configure Container App Env Variables
-
-```bash
-# Set production environment variables on Container App
-# (secrets like connection strings are NOT stored here — fetched from Key Vault at runtime)
-
-az containerapp update \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --set-env-vars \
-    APP_ENV=production \
-    AZURE_KEY_VAULT_URL="https://$KEYVAULT_NAME.vault.azure.net/" \
-    AZURE_CLIENT_ID=$(az identity show --name $MANAGED_IDENTITY --resource-group $RESOURCE_GROUP --query clientId -o tsv) \
-    COSMOS_DB_SECRET_NAME="cosmos-db-connection-string" \
-    JWT_SECRET_NAME="jwt-secret-key"
-
-echo "✅ Container App environment variables configured."
+echo "✅ RBAC configured — UMSI can read from AKV and Cosmos DB"
 ```
 
 ### Step 6 — Verify Deployment
@@ -447,11 +286,50 @@ APP_URL=$(az containerapp show \
 
 curl "https://$APP_URL/health"
 # → {"status":"ok","environment":"production",...}
+
+# View logs if health check fails
+az containerapp logs show \
+  --name $CONTAINER_APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --follow | head -50
 ```
+
+### Step 7 — Update Existing Deployment (Manual)
+
+After initial deployment, use these commands to update your running app:
+
+```bash
+# 1. Build and push the latest image to ACR
+az acr build \
+  --registry dharmacr \
+  --image dharma-api:latest \
+  .
+
+# 2. Update the Container App with the new image + reload prod.env + set AZURE_CLIENT_ID
+UMSI_CLIENT_ID=$(az identity show \
+  --name dharma-env-umsi \
+  --resource-group dharma-rg \
+  --query clientId -o tsv)
+
+ENV_VARS=(${(f)"$(grep -vE '^\s*(#|$)' prod.env)"})
+
+az containerapp update \
+  --name dharma-api \
+  --resource-group dharma-rg \
+  --image dharmacr.azurecr.io/dharma-api:latest \
+  --set-env-vars "${ENV_VARS[@]}" "AZURE_CLIENT_ID=$UMSI_CLIENT_ID"
+  
+```
+
+**What this does:**
+- Rebuilds the Docker image and pushes to ACR
+- Reloads all configuration from `prod.env` (comments and empty lines excluded)
+- Sets `AZURE_CLIENT_ID` for Managed Identity authentication
+- Container app automatically restarts with the new revision
 
 ### Continuous Deployment (CI/CD)
 
-For GitHub Actions-based CI/CD, add the following workflow:
+For GitHub Actions-based CI/CD, add the following workflow. This automatically rebuilds and redeploys when you push to `main`:
 
 ```yaml
 # .github/workflows/deploy.yml
@@ -468,46 +346,165 @@ jobs:
       - uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Build and push image
+      
+      - name: Build and push image to ACR
         run: |
           az acr build \
             --registry ${{ vars.ACR_NAME }} \
             --image dharma-api:${{ github.sha }} \
             .
-      - name: Deploy new revision
+      
+      - name: Deploy new container app revision
         run: |
+          UMSI_CLIENT_ID=$(az identity show \
+            --name dharma-env-umsi \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --query clientId -o tsv)
+          
+          FILTERED_VARS=$(grep -v '^#' prod.env | grep -v '^$' | tr '\n' ' ')
+          
           az containerapp update \
             --name ${{ vars.CONTAINER_APP_NAME }} \
             --resource-group ${{ vars.RESOURCE_GROUP }} \
-            --image "${{ vars.ACR_NAME }}.azurecr.io/dharma-api:${{ github.sha }}"
+            --image "${{ vars.ACR_NAME }}.azurecr.io/dharma-api:${{ github.sha }}" \
+            --set-env-vars $FILTERED_VARS "AZURE_CLIENT_ID=$UMSI_CLIENT_ID"
+```
+
+**What happens:**
+1. Docker image is rebuilt and pushed to ACR with the git commit SHA
+2. `prod.env` is parsed and filtered to exclude comments
+3. Container App is updated with the new image and environment variables
+4. `AZURE_CLIENT_ID` is fetched from the Managed Identity and set separately
+5. At startup, the app fetches secrets from AKV using Managed Identity credentials
+6. Health endpoint becomes available once configuration is ready
+
+---
+
+## 5. Environment Variables & Configuration
+
+Configuration is split into **three sources** depending on the environment. This eliminates confusion about "where does this variable come from?"
+
+### Configuration Architecture
+
+```
+┌──────────────────────────────────────┐
+│   LOCAL DEVELOPMENT (APP_ENV=local)  │
+├──────────────────────────────────────┤
+│  .env (copy of .env.example)         │
+│  ├─ APP_ENV=local                    │
+│  ├─ MONGODB_URL (local mongo)        │
+│  ├─ JWT_SECRET_KEY (weak dev key)    │
+│  └─ DEBUG=true                       │
+│                                      │
+│  Loaded by: docker-compose           │
+│  Secrets from: .env (local file)     │
+│  No Azure SDK calls                  │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ PRODUCTION (APP_ENV=production)      │
+├──────────────────────────────────────┤
+│  prod.env + Azure Key Vault          │
+│  ├─ prod.env (config, safe to git)  │
+│  │  ├─ APP_ENV=production            │
+│  │  ├─ AZURE_KEY_VAULT_URL           │
+│  │  ├─ COSMOS_DB_SECRET_NAME         │
+│  │  ├─ JWT_SECRET_NAME               │
+│  │  └─ ALLOWED_ORIGINS               │
+│  │                                   │
+│  ├─ Azure Key Vault (secrets only)   │
+│  │  ├─ cosmos-db-connection-string   │
+│  │  └─ jwt-secret-key                │
+│  │                                   │
+│  ├─ Container App (Managed Identity) │
+│  │  └─ AZURE_CLIENT_ID (UMSI ref)    │
+│  │                                   │
+│  Loaded by: Container App at startup │
+│  Secrets fetched: Key Vault          │
+│  Auth: Managed Identity              │
+└──────────────────────────────────────┘
+```
+
+### Local Development (`.env`)
+
+Used by `docker-compose up`. Copy `.env.example` to `.env` for local development. This file is **ignored by git** and contains no secrets.
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `APP_ENV` | `local` | Tells app to skip Azure SDK |
+| `MONGODB_URL` | `mongodb://localhost:27017` | Local MongoDB in docker-compose |
+| `DATABASE_NAME` | `dharma_db` | DB name (same for local + prod) |
+| `JWT_SECRET_KEY` | `change-me-...` | Weak dev key (OK for testing) |
+| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` | 7 days |
+| `DEBUG` | `true` | Enable verbose logging |
+| `ALLOWED_ORIGINS` | `["*"]` | Allow all origins (unsafe for prod) |
+
+**Usage:**
+```bash
+cp .env.example .env
+docker-compose up
+```
+
+### Production Configuration (`prod.env`)
+
+Deployed to Azure Container Apps. This file is **safe to commit to git** — it contains only configuration, no secrets.
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `APP_ENV` | `production` | Tells app to load secrets from AKV |
+| `AZURE_KEY_VAULT_URL` | `https://dharma-kv.vault.azure.net/` | AKV endpoint |
+| `COSMOS_DB_SECRET_NAME` | `cosmos-db-connection-string` | Secret name (value fetched from AKV) |
+| `JWT_SECRET_NAME` | `jwt-secret-key` | Secret name (value fetched from AKV) |
+| `AZURE_STORAGE_ACCOUNT_URL` | `https://<account>.blob.core.windows.net` | Blob storage URL |
+| `AZURE_STORAGE_CONTAINER` | `dharma-media` | Blob container name |
+| `DEBUG` | `false` | Disable verbose logging |
+| `ALLOWED_ORIGINS` | `["https://dharma-app.example.com"]` | Restrict to your domain |
+
+**Note:** `AZURE_CLIENT_ID` is **not** in `prod.env` — it ties to a specific Managed Identity and is set separately during Container App deployment.
+
+### Secrets in Azure Key Vault (Production Only)
+
+These are fetched at startup by `@model_validator` in [config.py](app/core/config.py):
+
+| Secret Name | Value | Fetched into |
+|-------------|-------|--------------|
+| `cosmos-db-connection-string` | `mongodb://accountname:key@account.mongo.cosmos.azure.com:10255/...` | `MONGODB_URL` |
+| `jwt-secret-key` | `<256-bit hex string>` | `JWT_SECRET_KEY` |
+
+**Never commit real connection strings or keys to git.**
+
+### How Configuration is Loaded
+
+**Local Mode:**
+```python
+# .env (copy of .env.example)
+#   ↓
+# Pydantic reads all vars
+#   ↓
+# No AKV calls → Ready
+```
+
+**Production Mode:**
+```python
+# prod.env → Container App env vars set
+#   ↓
+# Pydantic reads all vars
+#   ↓
+# @model_validator(mode="after") checks APP_ENV == PRODUCTION
+#   ↓
+# DefaultAzureCredential (uses AZURE_CLIENT_ID)
+#   ↓
+# SecretClient fetches from AKV
+#   ↓
+# Overwrites MONGODB_URL and JWT_SECRET_KEY
+#   ↓
+# Ready
 ```
 
 ---
 
-## 7. Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `APP_ENV` | No | `local` | `local` or `production` |
-| `APP_NAME` | No | `Dharma AI Backend` | Shown in API docs |
-| `APP_VERSION` | No | `1.0.0` | Shown in `/health` and docs |
-| `DEBUG` | No | `false` | Enables verbose logging |
-| `MONGODB_URL` | Local only | `mongodb://localhost:27017` | Local MongoDB (docker-compose). In production, fetched from Key Vault |
-| `DATABASE_NAME` | No | `dharma_db` | Cosmos DB database name |
-| `JWT_SECRET_KEY` | Local only | *(weak dev default)* | HS256 signing key. In production, fetched from Key Vault (secret name: `jwt-secret-key`) |
-| `JWT_SECRET_NAME` | Prod only | `jwt-secret-key` | Name of the Key Vault secret containing JWT signing key |
-| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | `10080` | Token TTL (7 days) |
-| `AZURE_KEY_VAULT_URL` | Prod only | `""` | Key Vault URI (e.g., `https://dharma-kv.vault.azure.net/`) |
-| `COSMOS_DB_SECRET_NAME` | Prod only | `cosmos-db-connection-string` | Name of the Key Vault secret containing Cosmos DB connection string |
-| `AZURE_CLIENT_ID` | Prod only | `""` | Client ID of the user-assigned managed identity |
-| `AZURE_STORAGE_ACCOUNT_URL` | Prod only | `""` | Blob Storage URL |
-| `AZURE_STORAGE_CONTAINER` | No | `dharma-media` | Blob container name |
-| `ALLOWED_ORIGINS` | No | `["*"]` | CORS allow-list |
-
----
-
-## 8. AI Engine Strategy Pattern
+## 6. AI Engine Strategy Pattern
 
 The `AIEngine` abstract base class decouples the personalisation logic from the route handler:
 
@@ -558,7 +555,7 @@ def get_ai_engine() -> AIEngine:
 
 ---
 
-## 9. Security Model
+## 7. Security Model
 
 ### Authentication Flow
 

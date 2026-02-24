@@ -8,7 +8,14 @@ Flow:
      (In production this triggers an SMS via your provider of choice.)
   2. User reads OTP from SMS and submits it to POST /auth/verify-otp.
   3. Backend checks the OTP, creates a User document if one doesn't exist,
-     and returns a signed JWT access token.
+     and returns a short-lived access token + a long-lived refresh token.
+
+Token lifecycle:
+  • Access token  – 1-hour TTL. Sent on every API call.
+  • Refresh token – 30-day TTL. Used only at POST /auth/refresh.
+  • Token rotation – each /auth/refresh call issues a fresh pair and
+    invalidates the previous refresh token (jti check on User document).
+  • Single session – a new OTP login invalidates the previous refresh token.
 
 OTP storage:
   Production implementation should store time-limited OTPs in Azure Cache
@@ -18,15 +25,27 @@ OTP storage:
 
 Security notes:
   • The JWT `sub` claim carries the User's MongoDB ObjectId (not mobile).
-  • Access tokens expire after JWT_ACCESS_TOKEN_EXPIRE_MINUTES (default 7 days).
+  • Only the refresh token's JTI is persisted — the raw tokens are never stored.
   • OTPs themselves are never returned in any API response.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.security import create_access_token
+from app.api.dependencies import get_current_user
+from app.core.config import get_settings
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+)
 from app.models.user import User
+
+_settings = get_settings()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -53,6 +72,7 @@ class OTPVerifyBody(BaseModel):
 
 class AuthResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     is_new_user: bool = Field(
         ...,
@@ -62,6 +82,16 @@ class AuthResponse(BaseModel):
             "navigate to the onboarding screen or the main dashboard."
         ),
     )
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., description="The refresh token issued by POST /auth/verify-otp or a previous POST /auth/refresh.")
+
+
+class TokenPair(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -98,20 +128,24 @@ async def request_otp(body: OTPRequestBody) -> dict:
     "/verify-otp",
     response_model=AuthResponse,
     status_code=status.HTTP_200_OK,
-    summary="Verify OTP and obtain a JWT",
-    response_description="JWT access token and new-user flag.",
+    summary="Verify OTP and obtain tokens",
+    response_description="Access token, refresh token, and new-user flag.",
 )
 async def verify_otp(body: OTPVerifyBody) -> AuthResponse:
     """
-    Validates the supplied OTP.
+    Validates the supplied OTP and issues a token pair.
 
     **If user does not exist:** a skeleton User document is created so the
-    client receives a valid token immediately.  Profile completion happens
+    client receives valid tokens immediately. Profile completion happens
     asynchronously via PUT /users/me.
 
-    **If user exists:** the existing document is returned — no mutation.
+    **If user exists:** the existing document is returned — previous refresh
+    token is invalidated (single-session model).
 
-    Returns a signed JWT (7-day TTL by default) and the `is_new_user` flag.
+    Returns:
+      - `access_token`: 1-hour JWT for API calls.
+      - `refresh_token`: 30-day JWT for token rotation via POST /auth/refresh.
+      - `is_new_user`: route to onboarding if True.
     """
     # --- MOCK OTP VALIDATION ---
     if body.otp != _MOCK_OTP:
@@ -132,8 +166,94 @@ async def verify_otp(body: OTPVerifyBody) -> AuthResponse:
         user = existing_user  # type: ignore[assignment]
 
     access_token = create_access_token(subject=str(user.id))
+    refresh_token, jti = create_refresh_token(subject=str(user.id))
+
+    # Persist the new session jti (overwrites any previous session).
+    user.active_refresh_jti = jti
+    user.refresh_token_expires_at = datetime.now(timezone.utc) + timedelta(
+        days=_settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    await user.save()
 
     return AuthResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         is_new_user=is_new_user,
     )
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenPair,
+    status_code=status.HTTP_200_OK,
+    summary="Rotate tokens using a refresh token",
+    response_description="Fresh access token and rotated refresh token.",
+)
+async def refresh_tokens(body: RefreshRequest) -> TokenPair:
+    """
+    Issues a new access token and rotates the refresh token.
+
+    The supplied refresh token is validated against the jti stored on the
+    User document. On success, a fresh pair is returned and the previous
+    refresh token is immediately invalidated (token rotation).
+
+    Raises HTTP 401 if the refresh token is expired, invalid, or has already
+    been rotated (replay detection).
+    """
+    _401 = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = decode_refresh_token(body.refresh_token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has expired. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.PyJWTError:
+        raise _401
+
+    user_id: str | None = payload.get("sub")
+    jti: str | None = payload.get("jti")
+    if not user_id or not jti:
+        raise _401
+
+    user = await User.get(user_id)
+    if user is None or user.active_refresh_jti != jti:
+        # Unknown user, or token was already rotated / session was logged out.
+        raise _401
+
+    # Issue a fresh token pair and rotate the stored jti.
+    new_access_token = create_access_token(subject=user_id)
+    new_refresh_token, new_jti = create_refresh_token(subject=user_id)
+
+    user.active_refresh_jti = new_jti
+    user.refresh_token_expires_at = datetime.now(timezone.utc) + timedelta(
+        days=_settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    await user.save()
+
+    return TokenPair(access_token=new_access_token, refresh_token=new_refresh_token)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Invalidate the current session",
+    response_description="Confirmation that the session was cleared.",
+)
+async def logout(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """
+    Clears the active refresh token jti from the User document, effectively
+    invalidating the current session. The client should discard both tokens.
+    """
+    current_user.active_refresh_jti = None
+    current_user.refresh_token_expires_at = None
+    await current_user.save()
+    return {"detail": "Logged out successfully."}

@@ -61,5 +61,11 @@ class User(Document):
     # ── Embedded Gamification Stats ───────────────────────────────────────────
     stats: UserStats = Field(default_factory=UserStats)
 
+    # ── Auth session (single active session per user) ─────────────────────────
+    # The JTI (JWT ID) of the currently valid refresh token.
+    # Cleared on logout; replaced on each new login or token rotation.
+    active_refresh_jti: Optional[str] = None
+    refresh_token_expires_at: Optional[datetime] = None
+
     class Settings:
         name = "users"

@@ -67,7 +67,7 @@ async def get_current_user(
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token has expired. Please log in again.",
+            detail="Access token has expired. Use POST /auth/refresh to obtain a new one.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.PyJWTError:
