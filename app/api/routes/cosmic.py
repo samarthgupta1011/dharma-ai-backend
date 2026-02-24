@@ -29,9 +29,11 @@ Inferences:
 import datetime as dt
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.api.dependencies import get_current_user
 from app.models.panchang import DailyPanchang
+from app.models.user import User
 
 router = APIRouter(prefix="/cosmic", tags=["Cosmic / Panchang"])
 
@@ -57,6 +59,7 @@ async def get_panchang(
         ),
         examples=["2025-01-14"],
     ),
+    current_user: User = Depends(get_current_user),
 ) -> DailyPanchang:
     """
     Returns the Panchang (Tithi, Nakshatra, Vaar, Yoga, Karana, Paksha)

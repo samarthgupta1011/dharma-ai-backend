@@ -16,9 +16,11 @@ Public endpoint — no JWT required.
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.api.dependencies import get_current_user
 from app.models.ingredients import ActivityType, BaseIngredient
+from app.models.user import User
 
 router = APIRouter(prefix="/stories", tags=["Stories"])
 
@@ -41,6 +43,7 @@ async def shuffle_stories(
         le=10,
         description="Number of random stories to return (1–10, default 3).",
     ),
+    current_user: User = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Returns a random selection of Story ingredients using MongoDB's
