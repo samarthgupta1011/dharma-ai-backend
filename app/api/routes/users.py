@@ -1,23 +1,20 @@
 """
 app/api/routes/users.py
 ────────────────────────
-User profile and streak management endpoints.
+User profile endpoints.
 
 All endpoints in this module are JWT-protected via `get_current_user`.
 
-Streak logic (POST /users/me/streak/increment):
+Streak logic (auto-calculated on GET /users/me):
   ┌──────────────────────────────┬─────────────────────────────────────┐
   │ last_activity_date condition │ Action                              │
   ├──────────────────────────────┼─────────────────────────────────────┤
-  │ == today                     │ Idempotent — no change.             │
+  │ == today                     │ Idempotent — no DB write.           │
   │ == yesterday                 │ current_streak += 1                 │
   │ Older or None                │ Streak broken → current_streak = 1  │
   └──────────────────────────────┴─────────────────────────────────────┘
-  After each valid increment, longest_streak is updated if current > longest.
-
-  The streak endpoint is intentionally separate from content endpoints so
-  the mobile client can call it once per session without coupling it to
-  any specific activity type.
+  After each change, longest_streak is updated if current > longest.
+  Opening the app and fetching the profile counts as daily activity.
 """
 
 from datetime import date, datetime
@@ -79,12 +76,6 @@ class UserOut(BaseModel):
         )
 
 
-class StreakOut(BaseModel):
-    current_streak: int
-    longest_streak: int
-    message: str
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -95,7 +86,27 @@ class StreakOut(BaseModel):
 async def get_me(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> UserOut:
-    """Returns the full profile of the authenticated user."""
+    """
+    Returns the full profile of the authenticated user.
+
+    Also automatically updates the daily activity streak:
+    - First call of the day → streak increments (or initialises to 1).
+    - Subsequent calls the same day → idempotent, no DB write.
+    - Called after a gap of more than one day → streak resets to 1.
+    """
+    today = date.today()
+    stats: UserStats = current_user.stats
+
+    if stats.last_activity_date != today:
+        if stats.last_activity_date is not None and (today - stats.last_activity_date).days == 1:
+            stats.current_streak += 1
+        else:
+            stats.current_streak = 1
+
+        stats.last_activity_date = today
+        stats.longest_streak = max(stats.longest_streak, stats.current_streak)
+        await current_user.set({"stats": stats.model_dump()})
+
     return UserOut.from_document(current_user)
 
 
@@ -122,57 +133,3 @@ async def update_me(
         await current_user.sync()
 
     return UserOut.from_document(current_user)
-
-
-@router.post(
-    "/me/streak/increment",
-    response_model=StreakOut,
-    summary="Increment daily activity streak",
-)
-async def increment_streak(
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> StreakOut:
-    """
-    Records today's activity and updates the streak counter.
-
-    **Idempotent:** Calling this endpoint multiple times on the same day
-    returns the current streak without further incrementing it.
-
-    **Streak rules:**
-    - Called on the same day as `last_activity_date` → no change.
-    - Called exactly one day after `last_activity_date` → streak incremented.
-    - Called after a gap of more than one day → streak reset to 1.
-    """
-    today = date.today()
-    stats: UserStats = current_user.stats
-
-    # ── Idempotency guard ─────────────────────────────────────────────────────
-    if stats.last_activity_date == today:
-        return StreakOut(
-            current_streak=stats.current_streak,
-            longest_streak=stats.longest_streak,
-            message="Activity already recorded for today. Keep the momentum!",
-        )
-
-    # ── Streak calculation ────────────────────────────────────────────────────
-    if stats.last_activity_date is not None:
-        gap_days = (today - stats.last_activity_date).days
-        if gap_days == 1:
-            stats.current_streak += 1
-        else:
-            # Streak broken — restart from 1.
-            stats.current_streak = 1
-    else:
-        # First ever activity.
-        stats.current_streak = 1
-
-    stats.last_activity_date = today
-    stats.longest_streak = max(stats.longest_streak, stats.current_streak)
-
-    await current_user.set({"stats": stats.model_dump()})
-
-    return StreakOut(
-        current_streak=stats.current_streak,
-        longest_streak=stats.longest_streak,
-        message="Streak updated. Well done!",
-    )
