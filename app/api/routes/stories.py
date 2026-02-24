@@ -74,8 +74,6 @@ async def shuffle_stories(
         {"$project": {"_id": 0}},
     ]
 
-    results: List[Dict[str, Any]] = await BaseIngredient.aggregate(
-        aggregation_pipeline=pipeline,
-    ).to_list()
+    results: List[Dict[str, Any]] = await BaseIngredient.get_motor_collection().aggregate(pipeline).to_list(length=count)
 
     return results
