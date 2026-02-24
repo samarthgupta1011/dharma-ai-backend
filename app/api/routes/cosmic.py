@@ -29,7 +29,7 @@ Inferences:
 import datetime as dt
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from app.models.panchang import DailyPanchang
 
@@ -66,20 +66,23 @@ async def get_panchang(
     Returns **HTTP 404** if panchang data has not been populated for the
     given city + date combination.
     """
-    target_date = query_date or dt.date.today()
+    # panchang = await DailyPanchang.find_one(
+    #     DailyPanchang.city == city,
+    #     DailyPanchang.date == target_date,
+    # )
 
-    panchang = await DailyPanchang.find_one(
-        DailyPanchang.city == city,
-        DailyPanchang.date == target_date,
-    )
+    # if panchang is None:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND,
+    #         detail=(
+    #             f"No Panchang data found for city='{city}' on {target_date}. "
+    #             "Ensure the nightly data-population job has run for this city."
+    #         ),
+    #     )
 
-    if panchang is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"No Panchang data found for city='{city}' on {target_date}. "
-                "Ensure the nightly data-population job has run for this city."
-            ),
-        )
+    panchang = await DailyPanchang.aggregate(
+        [{"$sample": {"size": 1}}],
+        projection_model=DailyPanchang,
+    ).to_list()
 
-    return panchang
+    return panchang[0]

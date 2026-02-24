@@ -66,5 +66,5 @@ async def get_recipe(
     `mood` and `feelings` params are accepted but not yet used —
     AI-based personalisation will be wired in a future iteration.
     """
-    ingredients = await BaseIngredient.find_all().to_list()
+    ingredients = await BaseIngredient.find(with_children=True).to_list()  # type: ignore[union-attr]
     return [ingredient.model_dump(mode="json") for ingredient in ingredients]
