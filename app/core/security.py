@@ -22,7 +22,7 @@ from typing import Optional
 
 import jwt
 
-from app.core.config import get_settings
+from app.config.settings import get_settings
 
 settings = get_settings()
 

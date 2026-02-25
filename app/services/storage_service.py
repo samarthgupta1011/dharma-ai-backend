@@ -17,10 +17,10 @@ URL field convention:
     {AZURE_STORAGE_ACCOUNT_URL}/{AZURE_STORAGE_CONTAINER}/{blob_path}?{sas_token}
 
 LOCAL / PRODUCTION behaviour:
-  • LOCAL  (AZURE_STORAGE_ACCOUNT_URL is empty): all methods are no-ops;
-    original path values are returned unchanged. No Azure SDK calls are made.
-  • PRODUCTION: UserDelegationKey is lazily fetched on the first request
-    and refreshed when it approaches expiry.
+  • LOCAL  (APP_ENV=local): all methods are no-ops; original path values are
+    returned unchanged. No Azure SDK calls are made.
+  • PRODUCTION (APP_ENV=production): UserDelegationKey is lazily fetched on the
+    first request and refreshed when it approaches expiry.
 
 Threading / async safety:
   • BlobServiceClient.get_user_delegation_key() is a SYNCHRONOUS blocking
@@ -48,7 +48,7 @@ from azure.storage.blob import (
     generate_blob_sas,
 )
 
-from app.core.config import get_settings
+from app.config.settings import AppEnvironment, get_settings
 
 # UserDelegationKey cache TTL. Azure enforces a maximum of 7 days;
 # 2 hours is conservative and always greater than any SAS expiry.
@@ -94,8 +94,8 @@ class StorageService:
 
     @property
     def _is_enabled(self) -> bool:
-        """True only when Azure Blob Storage is configured (production)."""
-        return bool(self._settings.AZURE_STORAGE_ACCOUNT_URL)
+        """True only in production mode (APP_ENV=production)."""
+        return self._settings.APP_ENV == AppEnvironment.PRODUCTION
 
     def _key_needs_refresh(self) -> bool:
         """
@@ -199,7 +199,7 @@ class StorageService:
         Fields processed: audio_url, gif_url, image_url, icon_url.
 
         Skipped silently when:
-          • Storage is not configured (LOCAL mode, AZURE_STORAGE_ACCOUNT_URL empty)
+          • Storage is not configured (APP_ENV=local)
           • The field is absent from data
           • The field value is "" (default for un-uploaded assets) or non-string
 

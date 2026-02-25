@@ -312,46 +312,32 @@ az containerapp logs show \
   --follow | head -50
 ```
 
-### Step 7 — Update Existing Deployment (Manual)
-
-After initial deployment, use these commands to update your running app:
+### Step 7 — Update Existing Deployment
 
 ```bash
-# 1. Build and push the latest image to ACR
-az acr build \
-  --registry dharmacr \
-  --image dharma-api:latest \
-  .
+# Build and push with unique tag (prevents caching issues)
+IMAGE_TAG=$(git rev-parse --short HEAD)-$(date +%s)
+az acr build --registry dharmacr --platform linux/amd64 --image dharma-api:${IMAGE_TAG} .
 
-# 2. Update the Container App with the new image + reload prod.env + set AZURE_CLIENT_ID
-UMSI_CLIENT_ID=$(az identity show \
-  --name dharma-env-umsi \
-  --resource-group dharma-rg \
-  --query clientId -o tsv)
+# Parse env vars with proper formatting
+ENV_VARS=$(grep -v '^#' app/config/prod.env | grep -v '^$')
+UMSI_CLIENT_ID=$(az identity show --name dharma-env-umsi --resource-group dharma-rg --query clientId -o tsv)
 
-ENV_VARS=(${(f)"$(grep -vE '^\s*(#|$)' prod.env)"})
-
+# Deploy (convert newlines to spaces for proper parsing)
 az containerapp update \
   --name dharma-api \
   --resource-group dharma-rg \
-  --image dharmacr.azurecr.io/dharma-api:latest \
-  --set-env-vars "${ENV_VARS[@]}" "AZURE_CLIENT_ID=$UMSI_CLIENT_ID"
-  
+  --image dharmacr.azurecr.io/dharma-api:${IMAGE_TAG} \
+  --set-env-vars $(echo "${ENV_VARS}" | tr '\n' ' ') AZURE_CLIENT_ID=${UMSI_CLIENT_ID}
 ```
-
-**What this does:**
-- Rebuilds the Docker image and pushes to ACR
-- Reloads all configuration from `prod.env` (comments and empty lines excluded)
-- Sets `AZURE_CLIENT_ID` for Managed Identity authentication
-- Container app automatically restarts with the new revision
 
 ### Continuous Deployment (CI/CD)
 
-For GitHub Actions-based CI/CD, add the following workflow. This automatically rebuilds and redeploys when you push to `main`:
+GitHub Actions workflow for automatic deployment on push to `main`:
 
 ```yaml
 # .github/workflows/deploy.yml
-name: Deploy to Azure Container Apps
+name: Deploy to Azure
 on:
   push:
     branches: [main]
@@ -365,36 +351,23 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
-      - name: Build and push image to ACR
+      - name: Build and push
         run: |
           az acr build \
             --registry ${{ vars.ACR_NAME }} \
-            --image dharma-api:${{ github.sha }} \
-            .
+            --platform linux/amd64 \
+            --image dharma-api:${{ github.sha }} .
       
-      - name: Deploy new container app revision
+      - name: Deploy
         run: |
-          UMSI_CLIENT_ID=$(az identity show \
-            --name dharma-env-umsi \
-            --resource-group ${{ vars.RESOURCE_GROUP }} \
-            --query clientId -o tsv)
-          
-          FILTERED_VARS=$(grep -v '^#' prod.env | grep -v '^$' | tr '\n' ' ')
-          
+          ENV_VARS=$(grep -v '^#' app/config/prod.env | grep -v '^$')
+          UMSI_ID=$(az identity show --name dharma-env-umsi --resource-group ${{ vars.RESOURCE_GROUP }} --query clientId -o tsv)
           az containerapp update \
             --name ${{ vars.CONTAINER_APP_NAME }} \
             --resource-group ${{ vars.RESOURCE_GROUP }} \
             --image "${{ vars.ACR_NAME }}.azurecr.io/dharma-api:${{ github.sha }}" \
-            --set-env-vars $FILTERED_VARS "AZURE_CLIENT_ID=$UMSI_CLIENT_ID"
+            --set-env-vars $(echo "${ENV_VARS}" | tr '\n' ' ') AZURE_CLIENT_ID=${UMSI_ID}
 ```
-
-**What happens:**
-1. Docker image is rebuilt and pushed to ACR with the git commit SHA
-2. `prod.env` is parsed and filtered to exclude comments
-3. Container App is updated with the new image and environment variables
-4. `AZURE_CLIENT_ID` is fetched from the Managed Identity and set separately
-5. At startup, the app fetches secrets from AKV using Managed Identity credentials
-6. Health endpoint becomes available once configuration is ready
 
 ---
 

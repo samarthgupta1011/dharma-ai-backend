@@ -24,7 +24,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
-from app.core.config import get_settings
+from app.config.settings import get_settings
 from app.models.ingredients import ActivityType
 
 router = APIRouter(prefix="/metadata", tags=["Metadata"])

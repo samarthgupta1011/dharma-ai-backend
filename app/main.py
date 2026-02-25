@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.api.routes import auth, cosmic, metadata, recipe, stories, users
-from app.core.config import get_settings
+from app.config.settings import get_settings
 from app.models.ingredients import (
     BaseIngredient,
     Breathing,
