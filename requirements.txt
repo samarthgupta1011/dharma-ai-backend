@@ -19,6 +19,7 @@ PyJWT==2.10.1                      # HS256 JWT encode / decode
 # ── Azure SDK (production only — harmless to install in dev) ──────────────────
 azure-identity==1.19.0             # DefaultAzureCredential (Managed Identity)
 azure-keyvault-secrets==4.9.0      # SecretClient for Key Vault access
+azure-storage-blob==12.24.0        # BlobServiceClient, generate_blob_sas, UserDelegationKey
 
 # ── HTTP Client (for optional outbound calls, e.g. SMS provider) ──────────────
 httpx==0.28.1

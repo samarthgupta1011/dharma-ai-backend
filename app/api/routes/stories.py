@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.dependencies import get_current_user
 from app.models.ingredients import ActivityType, BaseIngredient
 from app.models.user import User
+from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/stories", tags=["Stories"])
 
@@ -76,4 +77,8 @@ async def shuffle_stories(
 
     results: List[Dict[str, Any]] = await BaseIngredient.get_motor_collection().aggregate(pipeline).to_list(length=count)
 
-    return results
+    storage = get_storage_service()
+    signed: List[Dict[str, Any]] = []
+    for story in results:
+        signed.append(await storage.sign_media_fields(story))
+    return signed

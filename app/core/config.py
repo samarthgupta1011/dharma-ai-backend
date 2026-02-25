@@ -122,6 +122,10 @@ class Settings(BaseSettings):
         description="e.g. https://dharmastorage.blob.core.windows.net",
     )
     AZURE_STORAGE_CONTAINER: str = "dharma-media"
+    AZURE_STORAGE_SAS_EXPIRY_MINUTES: int = Field(
+        default=60,
+        description="Lifetime in minutes for generated Blob SAS URLs.",
+    )
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: List[str] = ["*"]

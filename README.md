@@ -272,7 +272,25 @@ az role assignment create \
   --role "Cosmos DB Account Reader Role" \
   --scope $COSMOS_ID
 
-echo "✅ RBAC configured — UMSI can read from AKV and Cosmos DB"
+# Grant "Storage Blob Delegator" — allows get_user_delegation_key() for SAS URL generation
+STORAGE_ACCOUNT="dharmastorage"   # Update with your storage account name
+STORAGE_ID=$(az storage account show \
+  --name $STORAGE_ACCOUNT \
+  --resource-group $RESOURCE_GROUP \
+  --query id -o tsv)
+
+az role assignment create \
+  --assignee $PRINCIPAL_ID \
+  --role "Storage Blob Delegator" \
+  --scope $STORAGE_ID
+
+# Grant "Storage Blob Data Reader" — allows the generated SAS to grant read access to blobs
+az role assignment create \
+  --assignee $PRINCIPAL_ID \
+  --role "Storage Blob Data Reader" \
+  --scope "$STORAGE_ID/blobServices/default/containers/dharma-media"
+
+echo "✅ RBAC configured — UMSI can read from AKV, Cosmos DB, and generate Blob SAS URLs"
 ```
 
 ### Step 6 — Verify Deployment
@@ -458,6 +476,7 @@ Deployed to Azure Container Apps. This file is **safe to commit to git** — it 
 | `JWT_SECRET_NAME` | `jwt-secret-key` | Secret name (value fetched from AKV) |
 | `AZURE_STORAGE_ACCOUNT_URL` | `https://<account>.blob.core.windows.net` | Blob storage URL |
 | `AZURE_STORAGE_CONTAINER` | `dharma-media` | Blob container name |
+| `AZURE_STORAGE_SAS_EXPIRY_MINUTES` | `60` | Lifetime (minutes) for generated Blob SAS URLs |
 | `DEBUG` | `false` | Disable verbose logging |
 | `ALLOWED_ORIGINS` | `["https://dharma-app.example.com"]` | Restrict to your domain |
 

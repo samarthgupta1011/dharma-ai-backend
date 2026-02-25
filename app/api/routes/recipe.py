@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.dependencies import get_current_user
 from app.models.ingredients import BaseIngredient
 from app.models.user import User
+from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/recipe", tags=["Recipe"])
 
@@ -67,4 +68,8 @@ async def get_recipe(
     AI-based personalisation will be wired in a future iteration.
     """
     ingredients = await BaseIngredient.find(with_children=True).to_list()  # type: ignore[union-attr]
-    return [ingredient.model_dump(mode="json") for ingredient in ingredients]
+    storage = get_storage_service()
+    result = []
+    for ingredient in ingredients:
+        result.append(await storage.sign_media_fields(ingredient.model_dump(mode="json")))
+    return result
