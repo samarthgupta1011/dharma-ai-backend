@@ -82,6 +82,26 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
+    # ── OpenAI API ────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: str = Field(
+        default="",
+        description=(
+            "API key for OpenAI. In LOCAL mode, read from .env. "
+            "In PRODUCTION, fetched from Azure Key Vault—must not be set in env."
+        ),
+    )
+    OPENAI_API_KEY_SECRET_NAME: str = Field(
+        default="openai-api-key",
+        description="Name of the Key Vault secret containing OpenAI API key (prod only).",
+    )
+    ENABLE_OPENAI: bool = Field(
+        default=False,
+        description=(
+            "Enable OpenAI API calls for Gita verse selection and reflections. "
+            "Set to False in LOCAL dev to save tokens. When disabled, mock data is returned."
+        ),
+    )
+
     # ── Local MongoDB (only used when APP_ENV=local) ──────────────────────────
     # In local development we connect to MongoDB 6.0 running in docker-compose.
     # MongoDB 6.0 implements the same wire protocol as Azure Cosmos DB API for
@@ -177,6 +197,16 @@ class Settings(BaseSettings):
                     f"Ensure the secret exists and UMSI has 'Key Vault Secrets User' role. Error: {e}"
                 ) from e
 
+            # Fetch OpenAI API key from AKV
+            try:
+                openai_secret = secret_client.get_secret(self.OPENAI_API_KEY_SECRET_NAME)
+                self.OPENAI_API_KEY = openai_secret.value  # type: ignore[assignment]
+            except Exception as e:
+                raise RuntimeError(
+                    f"PRODUCTION: Failed to fetch OpenAI API key '{self.OPENAI_API_KEY_SECRET_NAME}' from Key Vault. "
+                    f"Ensure the secret exists and UMSI has 'Key Vault Secrets User' role. Error: {e}"
+                ) from e
+
         return self
 
     @model_validator(mode="after")
@@ -207,6 +237,12 @@ class Settings(BaseSettings):
                     "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
                 )
 
+            if self.ENABLE_OPENAI and not self.OPENAI_API_KEY:
+                raise ValueError(
+                    "LOCAL mode: ENABLE_OPENAI=true requires OPENAI_API_KEY in .env. "
+                    "Get your key from https://platform.openai.com/api-keys"
+                )
+
         # PRODUCTION mode requirements
         elif self.APP_ENV == AppEnvironment.PRODUCTION:
             if not self.AZURE_KEY_VAULT_URL:
@@ -231,6 +267,12 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "PRODUCTION: Cosmos DB connection string not loaded from Key Vault. "
                     "Ensure 'cosmos-db-connection-string' secret exists in AKV."
+                )
+
+            if self.ENABLE_OPENAI and not self.OPENAI_API_KEY:
+                raise ValueError(
+                    "PRODUCTION: ENABLE_OPENAI=true requires OpenAI API key loaded from Key Vault. "
+                    "Ensure 'openai-api-key' secret exists in AKV."
                 )
 
         return self

@@ -67,5 +67,8 @@ class User(Document):
     active_refresh_jti: Optional[str] = None
     refresh_token_expires_at: Optional[datetime] = None
 
+    # ── Admin Role ────────────────────────────────────────────────────────────
+    is_admin: bool = False
+
     class Settings:
         name = "users"

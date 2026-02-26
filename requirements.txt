@@ -16,6 +16,9 @@ pydantic-settings==2.6.1           # BaseSettings with .env file support
 # ── Authentication ────────────────────────────────────────────────────────────
 PyJWT==2.10.1                      # HS256 JWT encode / decode
 
+# ── LLM & AI ──────────────────────────────────────────────────────────────────
+openai>=1.0.0                       # OpenAI API client (Gita verse selection & reflection)
+
 # ── Azure SDK (production only — harmless to install in dev) ──────────────────
 azure-identity==1.19.0             # DefaultAzureCredential (Managed Identity)
 azure-keyvault-secrets==4.9.0      # SecretClient for Key Vault access

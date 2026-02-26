@@ -4,30 +4,32 @@ app/api/routes/recipe.py
 The core personalisation endpoint: GET /recipe
 
 This is the central value proposition of Dharma AI.  Given a mood keyword
-and optional free-text feelings, the injected AIEngine selects a curated
-mix of spiritual ingredients (yoga, verse, breathing, mantra, deed, story)
-tailored to the user's current state.
+and optional free-text feelings, the OpenAI-powered endpoint:
+  1. Uses OpenAI to select the most relevant Bhagavad Gita verse
+  2. Generates 3 mood-adaptive inferences (uplifting or grounding based on mood)
+  3. Creates 3 therapist-style reflection questions
+  4. Returns the GitaVerse (fetched from DB by chapter/verse number) with inferences
+  5. Returns a Reflection ingredient with just the reflection questions
 
 Design decisions:
-  • The endpoint accepts both `mood` and `feelings` as query parameters to
-    keep it stateless and easily cacheable at the CDN layer in future.
-  • The response is a heterogeneous JSON array — each element may have
-    different fields depending on its `activity_type`.  This is intentional:
-    the React Native client uses the `activity_type` discriminator to render
-    the correct card component for each ingredient.
+  • Single OpenAI API call generates verse reference + inferences + questions
+  • Inferences are stored in GitaVerse (paired with verse content)
+  • Reflection questions are kept in Reflection ingredient (therapist-style inquiry)
+  • The response is a 2-element array: [GitaVerse, Reflection]
+  • Future versions will incorporate AI-driven ingredient selection (yoga,
+    breathing, stories) based on the verse and mood inferences.
   • The route is JWT-protected so future versions can personalise based on
     the user's history, preferences, and streak data.
-  • The AI engine is injected via Depends — swapping MockAIEngine for a real
-    LLM requires changing exactly one line in app/api/dependencies.py.
 """
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_current_user
-from app.models.ingredients import BaseIngredient
+from app.models.ingredients import GitaVerse, Reflection, BaseIngredient
 from app.models.user import User
+from app.services.openai_service import get_openai_service, OpenAIService
 from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/recipe", tags=["Recipe"])
@@ -35,41 +37,105 @@ router = APIRouter(prefix="/recipe", tags=["Recipe"])
 
 @router.get(
     "/",
-    summary="Get all spiritual ingredients",
+    summary="Get personalised Gita verse and reflections",
     response_description=(
-        "A heterogeneous list of all ingredient objects. "
-        "Each item includes an `activity_type` field that the frontend "
-        "uses to render the correct card component."
+        "A 2-element array: [GitaVerse, Reflection]. "
+        "GitaVerse contains the verse selected by OpenAI + 3 mood-adaptive inferences. "
+        "Reflection contains 3 therapist-style reflection questions. "
+        "If the verse is not in the database, it will have chapter/verse_number + inferences "
+        "but other fields (sanskrit_text, etc.) will be empty."
     ),
 )
 async def get_recipe(
     mood: str = Query(
         ...,
         description=(
-            "The user's current emotional state.  Must be one of the values "
-            "returned by GET /metadata/configs under the `moods` key.  "
-            "Example: 'anxious', 'grateful', 'lost'"
+            "The user's current emotional state. "
+            "Example: 'anxious', 'grateful', 'lost', 'overwhelmed', 'peaceful'"
         ),
         examples=["anxious"],
     ),
     feelings: str = Query(
         default="",
         description=(
-            "Optional free-text elaboration on the user's mood.  "
-            "Will be used for AI-based personalisation in a future iteration.  "
+            "Optional free-text elaboration on the user's mood. "
             "Example: 'I keep replaying an argument from this morning.'"
         ),
     ),
     current_user: User = Depends(get_current_user),
+    openai_service: OpenAIService = Depends(get_openai_service),
 ) -> List[Dict[str, Any]]:
     """
-    Returns all ingredients from the database.
-    `mood` and `feelings` params are accepted but not yet used —
-    AI-based personalisation will be wired in a future iteration.
+    Returns a Bhagavad Gita verse + reflections tailored to the user's mood.
+
+    Flow:
+      1. Query OpenAI for the best verse + inferences + questions
+      2. Lookup the verse in the database by chapter.verse_number
+      3. Create a Reflection ingredient with AI insights
+      4. Return both as a 2-element JSON array
+
+    If the verse is not found in the database, returns chapter/verse_number
+    with empty text fields (sanskrit_text, transliteration, english_translation, commentary).
     """
-    ingredients = await BaseIngredient.find(with_children=True).to_list()  # type: ignore[union-attr]
+
+    try:
+        # 1. Call OpenAI to get verse recommendation + reflections
+        ai_guidance = await openai_service.generate_gita_guidance(mood, feelings)
+
+        # Extract verse reference
+        chapter = ai_guidance["chapter"]
+        verse_number = ai_guidance["verse_number"]
+        inferences = ai_guidance["inferences"]
+        reflection_questions = ai_guidance["reflection_questions"]
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate Gita guidance: {str(e)}",
+        ) from e
+
+    # 2. Query for the GitaVerse in database
+    gita_verse = await GitaVerse.find_one(
+        {
+            "chapter": chapter,
+            "verse_number": verse_number,
+        }
+    )
+
+    # If not found, create a minimal GitaVerse with just the reference
+    if not gita_verse:
+        gita_verse = GitaVerse(
+            title=f"Bhagavad Gita {chapter}.{verse_number}",
+            why="This verse was selected by AI as relevant to your current mood.",
+            chapter=chapter,
+            verse_number=verse_number,
+            inferences=inferences,
+            # Leave text fields as None (optional fields in updated model)
+        )
+    else:
+        # Populate inferences on the fetched verse
+        gita_verse.inferences = inferences
+
+    # 3. Create Reflection ingredient with AI-generated questions
+    reflection = Reflection(
+        title=f"Reflections on Gita {chapter}.{verse_number}",
+        why="Personalized reflection questions generated by OpenAI based on your mood and the selected verse.",
+        reflection_questions=reflection_questions,
+    )
+
+    # 4. Prepare response (sign media URLs for both ingredients)
     storage = get_storage_service()
     result = []
-    for ingredient in ingredients:
-        result.append(await storage.sign_media_fields(ingredient.model_dump(mode="json")))
+
+    # Add GitaVerse
+    gita_dict = gita_verse.model_dump(mode="json")
+    gita_dict = await storage.sign_media_fields(gita_dict)
+    result.append(gita_dict)
+
+    # Add Reflection
+    reflection_dict = reflection.model_dump(mode="json")
+    reflection_dict = await storage.sign_media_fields(reflection_dict)
+    result.append(reflection_dict)
+
     return result
+
