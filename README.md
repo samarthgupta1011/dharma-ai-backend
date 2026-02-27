@@ -7,13 +7,14 @@
 
 ## Table of Contents
 
-1. [API Reference](#3-api-reference)
-2. [Local Development](#4-local-development)
-3. [Database Seeding](#5-database-seeding)
-4. [Deployment to Azure](#6-deployment-to-azure)
-5. [Environment Variables](#7-environment-variables)
-6. [AI Engine Strategy Pattern](#8-ai-engine-strategy-pattern)
-7. [Security Model](#9-security-model)
+1. [API Reference](#1-api-reference)
+2. [Local Development](#2-local-development)
+3. [Database Seeding](#3-database-seeding)
+4. [Deployment to Azure](#4-deployment-to-azure)
+5. [Environment Variables](#5-environment-variables--configuration)
+6. [AI Engine Strategy Pattern](#6-ai-engine-strategy-pattern)
+7. [OpenAI Integration](#8-openai-integration)
+8. [Security Model](#9-security-model)
 
 ---
 
@@ -430,6 +431,13 @@ Used by `docker-compose up`. Copy `.env.example` to `.env` for local development
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` | 7 days |
 | `DEBUG` | `true` | Enable verbose logging |
 | `ALLOWED_ORIGINS` | `["*"]` | Allow all origins (unsafe for prod) |
+| `ENABLE_OPENAI` | `false` | Enable OpenAI API calls (set to `true` + provide `OPENAI_API_KEY` to use real API) |
+| `OPENAI_API_KEY` | _(optional)_ | OpenAI API key (only if `ENABLE_OPENAI=true`); get from https://platform.openai.com/api-keys |
+
+**OpenAI Integration:**
+- When `ENABLE_OPENAI=false` (default), the app uses `MockOpenAIService` which returns hardcoded Gita verses and reflections—no API calls, no tokens consumed.
+- When `ENABLE_OPENAI=true`, the app uses `OpenAIService` which calls the OpenAI API (GPT-4o-mini) to generate personalized Gita verse recommendations and reflection questions based on user mood.
+- For local development, leaving `ENABLE_OPENAI=false` is recommended to avoid token usage during testing.
 
 **Usage:**
 ```bash
@@ -447,6 +455,8 @@ Deployed to Azure Container Apps. This file is **safe to commit to git** — it 
 | `AZURE_KEY_VAULT_URL` | `https://dharma-kv.vault.azure.net/` | AKV endpoint |
 | `COSMOS_DB_SECRET_NAME` | `cosmos-db-connection-string` | Secret name (value fetched from AKV) |
 | `JWT_SECRET_NAME` | `jwt-secret-key` | Secret name (value fetched from AKV) |
+| `ENABLE_OPENAI` | `true` | Enable OpenAI API calls for real Gita verse generation |
+| `OPENAI_API_KEY_SECRET_NAME` | `openai-api-key` | Secret name (value fetched from AKV) |
 | `AZURE_STORAGE_ACCOUNT_URL` | `https://<account>.blob.core.windows.net` | Blob storage URL |
 | `AZURE_STORAGE_CONTAINER` | `dharma-media` | Blob container name |
 | `AZURE_STORAGE_SAS_EXPIRY_MINUTES` | `60` | Lifetime (minutes) for generated Blob SAS URLs |
@@ -455,16 +465,31 @@ Deployed to Azure Container Apps. This file is **safe to commit to git** — it 
 
 **Note:** `AZURE_CLIENT_ID` is **not** in `prod.env` — it ties to a specific Managed Identity and is set separately during Container App deployment.
 
+**OpenAI Production Deployment:**
+Set `ENABLE_OPENAI=true` in `prod.env` to use real OpenAI API calls in production. The actual API key is never stored in `prod.env`—instead, it's fetched from Azure Key Vault at startup via the secret name `openai-api-key`. See "Secrets in Azure Key Vault" below for setup instructions.
+
 ### Secrets in Azure Key Vault (Production Only)
 
-These are fetched at startup by `@model_validator` in [config.py](app/core/config.py):
+These are fetched at startup by `@model_validator` in [config.py](app/config/settings.py):
 
 | Secret Name | Value | Fetched into |
 |-------------|-------|--------------|
 | `cosmos-db-connection-string` | `mongodb://accountname:key@account.mongo.cosmos.azure.com:10255/...` | `MONGODB_URL` |
 | `jwt-secret-key` | `<256-bit hex string>` | `JWT_SECRET_KEY` |
+| `openai-api-key` | `sk-...` | `OPENAI_API_KEY` (only if `ENABLE_OPENAI=true`) |
 
 **Never commit real connection strings or keys to git.**
+
+**To store the OpenAI API key in Azure Key Vault:**
+```bash
+# After obtaining your OpenAI API key from https://platform.openai.com/api-keys
+OPENAI_KEY="sk-..."
+
+az keyvault secret set \
+  --vault-name $KEYVAULT_NAME \
+  --name "openai-api-key" \
+  --value "$OPENAI_KEY"
+```
 
 ### How Configuration is Loaded
 
@@ -547,7 +572,123 @@ def get_ai_engine() -> AIEngine:
 
 ---
 
-## 7. Security Model
+## 8. OpenAI Integration
+
+The OpenAI integration uses a **strategy pattern** with two implementations: a production service that calls OpenAI's API, and a mock service for local development without token consumption.
+
+### Architecture
+
+```
+app/services/openai_service.py
+  ├─ BaseOpenAIService (abstract base)
+  │  └─ async def generate_gita_guidance(mood, feelings) → Dict
+  │
+  ├─ OpenAIService (production)
+  │  └─ Calls OpenAI API (GPT-4o-mini)
+  │     Sends mood + feelings → receives JSON with:
+  │       • chapter, verse_number
+  │       • 3 inferences (insights tailored to mood)
+  │       • 3 reflection questions
+  │
+  └─ MockOpenAIService (development)
+     └─ Returns hardcoded Gita verse data
+        No API calls, no token usage
+        Mood-based selection (anxious → 2:47, sad → 10:20, etc.)
+```
+
+### Configuration
+
+**Local Development:**
+```bash
+# .env (default)
+ENABLE_OPENAI=false                    # Uses MockOpenAIService
+OPENAI_API_KEY=                        # Not needed
+```
+
+```bash
+# .env (if you want to test real API locally)
+ENABLE_OPENAI=true
+OPENAI_API_KEY=sk-...                  # Get from https://platform.openai.com/api-keys
+```
+
+**Production:**
+```bash
+# prod.env (committed to git)
+ENABLE_OPENAI=true
+OPENAI_API_KEY_SECRET_NAME=openai-api-key
+```
+
+```bash
+# Azure Key Vault (secrets only, never in git)
+az keyvault secret set \
+  --vault-name $KEYVAULT_NAME \
+  --name "openai-api-key" \
+  --value "sk-..."
+```
+
+### How It Works
+
+The service is instantiated in `app/services/openai_service.py`:
+
+```python
+def get_openai_service() -> BaseOpenAIService:
+    """Factory function returning appropriate service based on settings."""
+    settings = get_settings()
+
+    if settings.ENABLE_OPENAI:
+        # Production: real OpenAI API calls
+        return OpenAIService(AsyncOpenAI(api_key=settings.OPENAI_API_KEY))
+    else:
+        # Development: mock data (no API calls)
+        return MockOpenAIService()
+```
+
+Used in routes:
+
+```python
+# app/api/routes/recipe.py (example endpoint)
+
+@router.post("/gita-guidance")
+async def get_gita_guidance(
+    mood: str,
+    feelings: str = "",
+    openai_service: BaseOpenAIService = Depends(get_openai_service),
+):
+    """Generate Gita verse recommendation and reflections."""
+    guidance = await openai_service.generate_gita_guidance(mood, feelings)
+    return guidance
+```
+
+No changes needed in the route — it works with both implementations.
+
+### OpenAI Prompt
+
+The prompt sent to GPT-4o-mini is structured to ensure consistent JSON response:
+
+```python
+prompt = f"""User mood: {mood}. User detail: {feelings}
+
+Recommend ONE Gita verse (ch.verse, e.g., 4.24 from chapters 1-18).
+
+Return JSON:
+{{
+  "chapter": <int>,
+  "verse_number": <int>,
+  "inferences": [<3 insights adapted to mood>],
+  "reflection_questions": [<3 open-ended questions>]
+}}"""
+```
+
+Validation ensures:
+- Chapter is between 1 and 18
+- Verse number is positive
+- Exactly 3 inferences
+- Exactly 3 reflection questions
+- All are strings
+
+---
+
+## 9. Security Model
 
 ### Authentication Flow
 
