@@ -1,0 +1,157 @@
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  id-token: write  # For OpenID Connect (OIDC) in future
+
+jobs:
+  build:
+    name: Build and Push to ACR
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set image tag
+        id: meta
+        run: |
+          # Use commit SHA for image tag (enables rollback)
+          echo "tags=${{ vars.ACR_NAME }}.azurecr.io/dharma-api:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "tags_latest=${{ vars.ACR_NAME }}.azurecr.io/dharma-api:latest" >> $GITHUB_OUTPUT
+
+      - name: Build and push image to ACR
+        run: |
+          # Build image and push to Azure Container Registry
+          # Using ACR Tasks (no local Docker daemon needed)
+          az acr build \
+            --registry ${{ vars.ACR_NAME }} \
+            --image dharma-api:${{ github.sha }} \
+            --image dharma-api:latest \
+            --file Dockerfile \
+            .
+
+      - name: Log successful build
+        run: |
+          echo "✅ Docker image built and pushed to ACR"
+          echo "   Registry: ${{ vars.ACR_NAME }}"
+          echo "   Image: dharma-api:${{ github.sha }}"
+          echo "   Also tagged as: dharma-api:latest"
+
+  deploy:
+    name: Deploy to Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production  # Requires approval to proceed
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get Managed Identity client ID
+        id: umsi
+        run: |
+          # Get the client ID of the user-assigned managed identity
+          CLIENT_ID=$(az identity show \
+            --name dharma-env-umsi \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --query clientId \
+            --output tsv)
+          echo "client-id=${CLIENT_ID}" >> $GITHUB_OUTPUT
+
+      - name: Parse prod.env and prepare environment variables
+        id: env-vars
+        run: |
+          # Extract environment variables from prod.env
+          # Remove comments and empty lines, build space-separated list
+          ENV_VARS=$(grep -v '^#' app/config/prod.env | grep -v '^$' | tr '\n' ' ')
+          echo "vars=${ENV_VARS}" >> $GITHUB_OUTPUT
+          echo "✅ Parsed prod.env environment variables"
+
+      - name: Deploy to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ vars.CONTAINER_APP_NAME }} \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --image "${{ vars.ACR_NAME }}.azurecr.io/dharma-api:${{ github.sha }}" \
+            --set-env-vars \
+              ${{ steps.env-vars.outputs.vars }} \
+              AZURE_CLIENT_ID=${{ steps.umsi.outputs.client-id }} \
+            --output table
+
+      - name: Verify deployment
+        run: |
+          # Wait for Container App to be healthy
+          echo "⏳ Waiting for Container App to be healthy..."
+          CONTAINER_APP_FQDN=$(az containerapp show \
+            --name ${{ vars.CONTAINER_APP_NAME }} \
+            --resource-group ${{ vars.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)
+
+          echo "Container App URL: https://${CONTAINER_APP_FQDN}"
+
+          # Retry health check up to 30 times (5 minute timeout)
+          for i in {1..30}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${CONTAINER_APP_FQDN}/health")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Deployment successful! Health check passed."
+              echo "   Status: OK"
+              echo "   URL: https://${CONTAINER_APP_FQDN}"
+              exit 0
+            fi
+            echo "⏳ Health check attempt $i/30 (HTTP $HTTP_CODE)... Retrying in 10s"
+            sleep 10
+          done
+
+          echo "❌ Deployment health check failed after 5 minutes"
+          echo "Manual troubleshooting steps:"
+          echo "1. Check Container App logs: az containerapp logs show --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }}"
+          echo "2. Review environment variables: az containerapp show --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }}"
+          echo "3. Rollback if needed: az containerapp update --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }} --image <previous-image>"
+          exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Container App** | ${{ vars.CONTAINER_APP_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | ${{ vars.RESOURCE_GROUP }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | ${{ vars.ACR_NAME }}.azurecr.io |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Handle deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo ""
+          echo "Common issues and fixes:"
+          echo "1. AZURE_CREDENTIALS invalid: Regenerate Service Principal"
+          echo "2. ACR_NAME/RESOURCE_GROUP not set: Check GitHub Variables"
+          echo "3. Container App environment variables invalid: Check prod.env syntax"
+          echo "4. UMSI not found: Ensure 'dharma-env-umsi' exists in your Managed Identity"
+          echo ""
+          echo "For manual debugging:"
+          echo "  az containerapp logs show -n ${{ vars.CONTAINER_APP_NAME }} -g ${{ vars.RESOURCE_GROUP }} --follow"
