@@ -49,3 +49,5 @@ docker-compose.override.yml
 
 # Azure
 local.settings.json
+
+responses/
