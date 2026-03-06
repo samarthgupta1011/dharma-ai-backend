@@ -52,3 +52,4 @@ docker-compose.override.yml
 local.settings.json
 
 responses/
+app/config/.env
