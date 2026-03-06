@@ -1,5 +1,6 @@
 # Environment files
 .env                # Local copy (never commit) — copy from .env.example
+**/.env             # Catch .env in any subdirectory
 # .env.example     # SAFE to commit — reference/template file
 # prod.env         # SAFE to commit — production config (no secrets)
 
