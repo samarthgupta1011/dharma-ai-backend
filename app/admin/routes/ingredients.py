@@ -37,7 +37,7 @@ from app.models.ingredients import (
     Breathing,
     Chanting,
     GitaVerse,
-    GoodDeed,
+    Punya,
     Story,
     Yoga,
 )
@@ -54,7 +54,7 @@ TYPE_TO_MODEL: Dict[str, Any] = {
     ActivityType.YOGA: Yoga,
     ActivityType.BREATHING: Breathing,
     ActivityType.MANTRA: Chanting,
-    ActivityType.GOOD_DEED: GoodDeed,
+    ActivityType.PUNYA: Punya,
     ActivityType.STORY: Story,
 }
 
@@ -310,9 +310,9 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
         ],
         media_fields=["audio_url", "icon_url"],
     ),
-    ActivityType.GOOD_DEED: ActivityTypeOptionspecs(
-        type=ActivityType.GOOD_DEED,
-        label="Good Deed",
+    ActivityType.PUNYA: ActivityTypeOptionspecs(
+        type=ActivityType.PUNYA,
+        label="Punya (Good Deed)",
         required_fields=[
             FieldSpec(
                 name="title",
@@ -326,19 +326,47 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 label="Why It Matters",
                 required=True,
             ),
+            FieldSpec(
+                name="activity",
+                type="text",
+                label="Activity (what to do)",
+                required=True,
+                description="Concrete action the user should take",
+            ),
         ],
         optional_fields=[
             FieldSpec(
-                name="task_description",
-                type="text",
-                label="Action Description",
+                name="emoji",
+                type="string",
+                label="Emoji",
+                required=False,
+                placeholder="💛",
+            ),
+            FieldSpec(
+                name="subtitle",
+                type="string",
+                label="Subtitle",
                 required=False,
             ),
             FieldSpec(
-                name="impact_logic",
-                type="text",
-                label="Impact Logic",
+                name="duration_mins",
+                type="integer",
+                label="Duration (minutes)",
                 required=False,
+            ),
+            FieldSpec(
+                name="location",
+                type="string",
+                label="Location (work / home / anywhere)",
+                required=False,
+                placeholder="anywhere",
+            ),
+            FieldSpec(
+                name="short_descp",
+                type="text",
+                label="Short Description (AI context)",
+                required=False,
+                description="Brief context passed to AI when listing activities (~15 words)",
             ),
             FieldSpec(
                 name="icon_url",

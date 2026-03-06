@@ -15,6 +15,10 @@ Architecture:
       2. A queryable field for filtering (e.g., stories shuffle endpoint).
       3. A Pydantic discriminator for OpenAPI schema generation.
 
+  • Common optional fields (emoji, subtitle, duration_mins, location,
+    short_descp) live on BaseIngredient so every subclass inherits them.
+    These are DB-stored and used for display + passing context to the AI.
+
   • The `tags` field is a Dict[str, float] mapping semantic keywords to
     relevance scores. The AI engine uses these scores when matching
     ingredients to a user's mood (e.g., {"anxiety": 0.9, "stress": 0.8}).
@@ -23,12 +27,12 @@ Architecture:
     grounding the practice in science or history rather than pure faith.
 """
 
-from typing import Annotated, Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 from enum import Enum
 from datetime import datetime, timezone
 
-from beanie import Document, Indexed
-from pydantic import Field
+from beanie import Document
+from pydantic import BaseModel, Field
 
 
 # ── Enum ──────────────────────────────────────────────────────────────────────
@@ -42,9 +46,33 @@ class ActivityType(str, Enum):
     GITA = "GITA"
     BREATHING = "BREATHING"
     MANTRA = "MANTRA"
-    GOOD_DEED = "GOOD_DEED"
+    PUNYA = "PUNYA"
     STORY = "STORY"
     REFLECTION = "REFLECTION"
+
+
+# ── Embedded Pydantic models (used in AI-generated responses) ─────────────────
+
+class DeeperInsight(BaseModel):
+    """A single deeper insight for a Gita verse, with emoji and title."""
+    emoji: str = Field(..., description="Safe, positive emoji for this insight.")
+    title: str = Field(..., description="Short title for the insight.")
+    inference: str = Field(
+        ...,
+        description="The insight text (~25 words), grounded in the verse and user mood.",
+    )
+
+
+class ImpactPointer(BaseModel):
+    """A single impact pointer for PUNYA / BREATHING activities."""
+    emoji: str = Field(..., description="Safe, positive emoji.")
+    point: str = Field(..., description="Impact statement (~20 words).")
+
+
+class ReflectionQuestion(BaseModel):
+    """A therapist-style reflection question with emoji."""
+    emoji: str = Field(..., description="Safe, positive emoji for the question.")
+    question: str = Field(..., description="Open-ended self-reflection question.")
 
 
 # ── Base (collection root) ────────────────────────────────────────────────────
@@ -64,11 +92,34 @@ class BaseIngredient(Document):
 
     # ── Common content fields ─────────────────────────────────────────────────
     title: str = Field(..., description="Short, human-readable title.")
+    emoji: str = Field(
+        default="",
+        description="Decorative emoji for this ingredient (safe, positive only).",
+    )
+    subtitle: str = Field(
+        default="",
+        description="Secondary display text shown below the title.",
+    )
     why: str = Field(
         ...,
         description=(
             "The scientific or historical rationale for this practice. "
             "This is the core of Dharma AI's skeptic-friendly approach."
+        ),
+    )
+    duration_mins: Optional[int] = Field(
+        default=None,
+        description="Read or practice duration in minutes.",
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Where this activity can be performed: 'work', 'home', or 'anywhere'.",
+    )
+    short_descp: str = Field(
+        default="",
+        description=(
+            "Brief context string passed to the AI when listing available "
+            "activities for selection. Keep it concise (~15 words)."
         ),
     )
 
@@ -109,6 +160,10 @@ class GitaVerse(BaseIngredient):
     philosophical poem embedded in the Mahabharata.  Modern psychology
     (Cognitive Behavioural Therapy, Stoicism) closely mirrors many of
     its frameworks for dealing with anxiety and inaction.
+
+    DB-stored: chapter, verse_number, sanskrit_text, english_translation,
+    commentary, audio_url.
+    AI-generated at runtime: deeper_insights_title, deeper_insights (3 items).
     """
 
     activity_type: Literal[ActivityType.GITA] = ActivityType.GITA
@@ -123,13 +178,19 @@ class GitaVerse(BaseIngredient):
         description="Verse number within the chapter.",
     )
 
-    # ── Mood-adaptive inferences ──────────────────────────────────────────────
-    inferences: List[str] = Field(
+    # ── AI-generated deeper insights (set at response time, not stored) ───────
+    deeper_insights_title: Optional[str] = Field(
+        default=None,
+        description=(
+            "One short evocative line summarising the deeper insight theme. "
+            "E.g. 'The ocean doesn't ask the river to stop'. AI-generated."
+        ),
+    )
+    deeper_insights: List[DeeperInsight] = Field(
         default_factory=list,
         description=(
-            "3 key insights derived from this verse, adapted to the user's mood. "
-            "If user is sad/anxious, inferences are uplifting. "
-            "If user is happy, inferences are grounding. "
+            "3 deeper insights, each with emoji + title + inference (~25 words). "
+            "Adapted to user mood: uplifting if sad, grounding if happy. "
             "AI-generated at request time, not stored in DB."
         ),
     )
@@ -194,6 +255,9 @@ class Breathing(BaseIngredient):
     variability (HRV) and CO₂/O₂ balance, activating the vagus nerve
     and reducing cortisol.  Studies (Zaccaro et al., 2018) show
     measurable reductions in anxiety within minutes.
+
+    DB-stored: audio_url, duration_seconds, pattern, animation.
+    AI-generated at runtime: ai_why, ai_impact (1-3 pointers).
     """
 
     activity_type: Literal[ActivityType.BREATHING] = ActivityType.BREATHING
@@ -211,6 +275,29 @@ class Breathing(BaseIngredient):
         description=(
             "Inhale-Hold-Exhale-Hold counts.  Example: '4-7-8' means "
             "inhale 4 counts, hold 7, exhale 8."
+        ),
+    )
+    animation: Optional[int] = Field(
+        default=None,
+        description=(
+            "Frontend animation enum number. The frontend renders the "
+            "corresponding breathing animation based on this value."
+        ),
+    )
+
+    # ── AI-generated fields (set at response time, not stored in DB) ──────────
+    ai_why: Optional[str] = Field(
+        default=None,
+        description=(
+            "AI-generated explanation (~20-25 words) of why this breathing "
+            "exercise helps, grounded in biology, neuroscience, and Vedic evidence."
+        ),
+    )
+    ai_impact: Optional[List[ImpactPointer]] = Field(
+        default=None,
+        description=(
+            "1-3 impact pointers (each ~20 words with emoji) describing "
+            "how the user feels after completing the exercise. AI-generated."
         ),
     )
 
@@ -240,27 +327,39 @@ class Chanting(BaseIngredient):
     )
 
 
-class GoodDeed(BaseIngredient):
+class Punya(BaseIngredient):
     """
-    A small, actionable act of kindness (Seva / service).
+    A small, actionable act of kindness / good deed (Seva / Punya).
 
     Psychological basis: Prosocial behaviour triggers oxytocin and
     serotonin release ('helper's high'), validated by neuroscience
     studies (Post, 2005).  This grounds the ancient concept of Dharma
     in measurable well-being outcomes.
+
+    DB-stored: activity (what to do), location, short_descp.
+    AI-generated at runtime: ai_why, ai_impact (1-3 pointers).
     """
 
-    activity_type: Literal[ActivityType.GOOD_DEED] = ActivityType.GOOD_DEED
+    activity_type: Literal[ActivityType.PUNYA] = ActivityType.PUNYA
 
-    task_description: str = Field(
+    activity: str = Field(
         default="",
         description="Concrete, single-sentence action the user should take today.",
     )
-    impact_logic: str = Field(
-        default="",
+
+    # ── AI-generated fields (set at response time, not stored in DB) ──────────
+    ai_why: Optional[str] = Field(
+        default=None,
         description=(
-            "Short explanation of *why* this deed matters — connecting the "
-            "action to neurochemical, social, or environmental outcomes."
+            "AI-generated explanation (~20-25 words) of why this activity helps, "
+            "grounded in biology, neuroscience, brain-wiring and Vedic evidence."
+        ),
+    )
+    ai_impact: Optional[List[ImpactPointer]] = Field(
+        default=None,
+        description=(
+            "1-3 impact pointers (each ~20 words with emoji) describing "
+            "the rewiring/rejuvenation effect after doing this activity. AI-generated."
         ),
     )
 
@@ -296,23 +395,24 @@ class Reflection(BaseIngredient):
     """
     Therapist-style reflection questions generated by OpenAI.
 
-    This ingredient contains 3 open-ended questions designed to encourage
-    the user to reflect deeply on the selected Bhagavad Gita verse and
-    how it relates to their current mood and situation.
+    Contains 3 open-ended questions (each with an emoji) designed to
+    encourage the user to pause, think, and reflect on the selected
+    Gita verse and suggested activities in relation to their mood.
 
     Design:
-      • Companion to GitaVerse in the recipe response.
-      • Generated at request time by OpenAI based on mood, feelings, and verse.
+      • Companion to GitaVerse, Punya, and Breathing in the recipe response.
+      • Generated at request time by OpenAI based on mood, feelings, and
+        all suggested activities.
       • Purely text-based (no media, audio, or persistent storage in DB).
     """
 
     activity_type: Literal[ActivityType.REFLECTION] = ActivityType.REFLECTION
 
-    reflection_questions: List[str] = Field(
+    reflection_questions: List[ReflectionQuestion] = Field(
         default_factory=list,
         description=(
             "3 open-ended, therapist-style questions for self-reflection. "
-            "Each question encourages the user to introspect on the verse's "
-            "relevance to their current mood and life situation."
+            "Each has an emoji and a question that encourages introspection "
+            "on the verse's relevance to the user's current mood and life."
         ),
     )

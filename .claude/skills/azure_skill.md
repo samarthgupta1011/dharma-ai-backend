@@ -12,7 +12,8 @@ Provide Claude with full application context so it can debug, add features, and 
 
 ## Architecture Patterns
 - **Strategy pattern for AI services**: `AIEngine` (ABC) in `app/services/ai_service.py` — swap implementations via FastAPI `Depends()` in `app/api/dependencies.py`
-- **Strategy pattern for OpenAI**: `BaseOpenAIService` in `app/services/openai_service.py` — `OpenAIService` (real) vs `MockOpenAIService` (dev). Controlled by `ENABLE_OPENAI` env var
+- **Strategy pattern for OpenAI**: `BaseOpenAIService` in `app/services/openai_service.py` — `OpenAIService` (real) vs `MockOpenAIService` (dev). Controlled by `ENABLE_OPENAI` env var. Main method: `generate_dharma_recipe(mood, feelings, punya_context, breathing_context)` returns 4-category dict
+- **AI prompts in separate file**: `app/prompts/dharma_prompts.py` — `SYSTEM_PROMPT` (guardrails: Hindu-scripture-only, safe emojis, no self-harm encouragement) + `RECIPE_PROMPT_TEMPLATE` (4-category JSON recipe). Edit prompts here without touching service code
 - **Polymorphic Beanie documents**: `BaseIngredient` is the collection root with `is_root = True`. All 7 activity types live in one `ingredients` collection, discriminated by `_class_id`
 - **Environment-aware config**: `app/config/settings.py` — `APP_ENV=local` skips all Azure SDK calls; `APP_ENV=production` fetches secrets from AKV via Managed Identity
 
@@ -27,6 +28,7 @@ Provide Claude with full application context so it can debug, add features, and 
 | `app/models/panchang.py` | Daily Panchang (Hindu almanac) model |
 | `app/services/ai_service.py` | AI engine strategy pattern |
 | `app/services/openai_service.py` | OpenAI service strategy pattern |
+| `app/prompts/dharma_prompts.py` | AI system prompt (guardrails) + recipe prompt template |
 | `app/api/dependencies.py` | FastAPI dependency injection |
 | `scripts/seed_data.py` | DB seeding script |
 | `docker-compose.yml` | Local dev environment |

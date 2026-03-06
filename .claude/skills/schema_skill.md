@@ -15,30 +15,43 @@ Document the current schema of all models so Claude can make changes that don't 
 
 ### ActivityType Enum
 ```
-YOGA | GITA | BREATHING | MANTRA | GOOD_DEED | STORY | REFLECTION
+YOGA | GITA | BREATHING | MANTRA | PUNYA | STORY | REFLECTION
 ```
+
+### Embedded Pydantic Models (used in AI-generated responses)
+| Model | Fields | Used By |
+|-------|--------|---------|
+| `DeeperInsight` | `emoji: str`, `title: str`, `inference: str` | `GitaVerse.deeper_insights` |
+| `ImpactPointer` | `emoji: str`, `point: str` | `Punya.ai_impact`, `Breathing.ai_impact` |
+| `ReflectionQuestion` | `emoji: str`, `question: str` | `Reflection.reflection_questions` |
 
 ### BaseIngredient (common fields — all types inherit these)
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
 | `activity_type` | `ActivityType` | — | Overridden with `Literal[...]` in subclasses |
 | `title` | `str` | required | Short human-readable title |
+| `emoji` | `str` | `""` | Decorative emoji (safe, positive only) |
+| `subtitle` | `str` | `""` | Secondary display text below title |
 | `why` | `str` | required | Science/history rationale (core UX field) |
+| `duration_mins` | `Optional[int]` | `None` | Read or practice duration in minutes |
+| `location` | `Optional[str]` | `None` | `"work"`, `"home"`, or `"anywhere"` |
+| `short_descp` | `str` | `""` | Brief context passed to AI for activity selection (~15 words) |
 | `tags` | `Dict[str, float]` | `{}` | Keyword → relevance score for AI matching |
 | `icon_url` | `str` | `""` | Azure Blob Storage URL |
 | `created_at` | `datetime` | `utcnow()` | UTC timestamp |
 
 ### GitaVerse (`activity_type = GITA`)
-| Field | Type | Default |
-|-------|------|---------|
-| `chapter` | `Optional[int]` | `None` |
-| `verse_number` | `Optional[int]` | `None` |
-| `inferences` | `List[str]` | `[]` |
-| `sanskrit_text` | `Optional[str]` | `None` |
-| `transliteration` | `Optional[str]` | `None` |
-| `english_translation` | `Optional[str]` | `None` |
-| `commentary` | `Optional[str]` | `None` |
-| `audio_url` | `str` | `""` |
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `chapter` | `Optional[int]` | `None` | Bhagavad Gita chapter (1-18) |
+| `verse_number` | `Optional[int]` | `None` | Verse within chapter |
+| `deeper_insights_title` | `Optional[str]` | `None` | AI-generated evocative one-liner |
+| `deeper_insights` | `List[DeeperInsight]` | `[]` | AI-generated: 3 insights with emoji+title+inference |
+| `sanskrit_text` | `Optional[str]` | `None` | Original Devanagari |
+| `transliteration` | `Optional[str]` | `None` | Roman-script phonetic |
+| `english_translation` | `Optional[str]` | `None` | Literal English translation |
+| `commentary` | `Optional[str]` | `None` | Commentary linking verse to modern life |
+| `audio_url` | `str` | `""` | Azure Blob URL for recitation audio |
 
 ### Yoga (`activity_type = YOGA`)
 | Field | Type | Default |
@@ -48,11 +61,14 @@ YOGA | GITA | BREATHING | MANTRA | GOOD_DEED | STORY | REFLECTION
 | `anatomical_focus` | `str` | `""` |
 
 ### Breathing (`activity_type = BREATHING`)
-| Field | Type | Default |
-|-------|------|---------|
-| `audio_url` | `str` | `""` |
-| `duration_seconds` | `int` | `0` |
-| `pattern` | `str` | `""` |
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `audio_url` | `str` | `""` | |
+| `duration_seconds` | `int` | `0` | |
+| `pattern` | `str` | `""` | e.g. "4-7-8" |
+| `animation` | `Optional[int]` | `None` | Frontend animation enum number |
+| `ai_why` | `Optional[str]` | `None` | AI-generated: why this helps (~25 words) |
+| `ai_impact` | `Optional[List[ImpactPointer]]` | `None` | AI-generated: 1-3 impact pointers |
 
 ### Chanting (`activity_type = MANTRA`)
 | Field | Type | Default |
@@ -61,11 +77,12 @@ YOGA | GITA | BREATHING | MANTRA | GOOD_DEED | STORY | REFLECTION
 | `mantra_text` | `str` | `""` |
 | `frequency_hz` | `float` | `0.0` |
 
-### GoodDeed (`activity_type = GOOD_DEED`)
-| Field | Type | Default |
-|-------|------|---------|
-| `task_description` | `str` | `""` |
-| `impact_logic` | `str` | `""` |
+### Punya (`activity_type = PUNYA`)
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `activity` | `str` | `""` | What to do (concrete action) |
+| `ai_why` | `Optional[str]` | `None` | AI-generated: why this helps (~25 words) |
+| `ai_impact` | `Optional[List[ImpactPointer]]` | `None` | AI-generated: 1-3 impact pointers |
 
 ### Story (`activity_type = STORY`)
 | Field | Type | Default |
@@ -75,9 +92,9 @@ YOGA | GITA | BREATHING | MANTRA | GOOD_DEED | STORY | REFLECTION
 | `image_url` | `str` | `""` |
 
 ### Reflection (`activity_type = REFLECTION`)
-| Field | Type | Default |
-|-------|------|---------|
-| `reflection_questions` | `List[str]` | `[]` |
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `reflection_questions` | `List[ReflectionQuestion]` | `[]` | Each has `emoji` + `question` |
 
 ---
 
@@ -132,7 +149,9 @@ Compound unique index on `(date, city)`.
 1. **Seed data** — `scripts/seed_data.py` — update sample documents if fields are added/removed
 2. **API routes** — `app/api/routes/` — check if any route reads/writes the changed field
 3. **Admin routes** — `app/admin/routes/` — check admin panel endpoints
-4. **OpenAI service** — `app/services/openai_service.py` — if changing `GitaVerse` or `Reflection` fields, the AI response parsing may need updating
+4. **OpenAI service** — `app/services/openai_service.py` — if changing `GitaVerse`, `Punya`, `Breathing`, or `Reflection` fields, the AI response parsing and validation may need updating
+5. **AI prompts** — `app/prompts/dharma_prompts.py` — if changing field names in AI-overlay fields, the prompt JSON schema must match
+6. **Admin guide** — `app/admin/ADMIN_PANEL_GUIDE.md` — update type-specific field documentation
 
 ### Guidelines
 - **New fields should be `Optional` or have a default** — existing MongoDB documents won't have the field, so a required field with no default will crash on read

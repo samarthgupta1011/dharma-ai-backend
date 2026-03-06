@@ -3,47 +3,84 @@ app/api/routes/recipe.py
 ─────────────────────────
 The core personalisation endpoint: GET /recipe
 
-This is the central value proposition of Dharma AI.  Given a mood keyword
-and optional free-text feelings, the OpenAI-powered endpoint:
-  1. Uses OpenAI to select the most relevant Bhagavad Gita verse
-  2. Generates 3 mood-adaptive inferences (uplifting or grounding based on mood)
-  3. Creates 3 therapist-style reflection questions
-  4. Returns the GitaVerse (fetched from DB by chapter/verse number) with inferences
-  5. Returns a Reflection ingredient with just the reflection questions
+Given a mood keyword and optional free-text feelings, this endpoint:
+  1. Loads available PUNYA and BREATHING activities from the database
+     and builds context strings for the AI.
+  2. Calls OpenAI (or the mock service) to get a 4-category recipe:
+     GITA verse, PUNYA activity, BREATHING exercise, and REFLECTIONS.
+  3. Looks up the GITA verse, PUNYA activity, and BREATHING exercise
+     from the database to merge DB-stored fields with AI-generated insights.
+  4. Returns a keyed JSON object:
+       {
+         gita: { ... },
+         punya: { ... },
+         breathing: { ... },
+         reflections: [ ... ],
+         dummy_data: false  // true when OpenAI is disabled
+       }
 
-Design decisions:
-  • Single OpenAI API call generates verse reference + inferences + questions
-  • Inferences are stored in GitaVerse (paired with verse content)
-  • Reflection questions are kept in Reflection ingredient (therapist-style inquiry)
-  • The response is a 2-element array: [GitaVerse, Reflection]
-  • Future versions will incorporate AI-driven ingredient selection (yoga,
-    breathing, stories) based on the verse and mood inferences.
-  • The route is JWT-protected so future versions can personalise based on
-    the user's history, preferences, and streak data.
+Fallback behaviour:
+  • When ENABLE_OPENAI=false, the mock service returns dummy data.
+    All text fields are suffixed with _DUMMY_ and `dummy_data: true`
+    is set at the top level.
+  • When the AI-recommended Gita verse is not found in the database,
+    the response still includes the AI-generated deeper insights but
+    marks `is_placeholder: true` on the gita object with helper text.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_current_user
-from app.models.ingredients import GitaVerse, Reflection, BaseIngredient
+from app.models.ingredients import (
+    BaseIngredient,
+    Breathing,
+    DeeperInsight,
+    GitaVerse,
+    ImpactPointer,
+    Punya,
+    Reflection,
+    ReflectionQuestion,
+)
 from app.models.user import User
-from app.services.openai_service import get_openai_service, OpenAIService
+from app.services.openai_service import BaseOpenAIService, get_openai_service
 from app.services.storage_service import get_storage_service
 
 router = APIRouter(prefix="/recipe", tags=["Recipe"])
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _build_activity_context(
+    activities: List[BaseIngredient],
+) -> tuple[str, Dict[int, BaseIngredient]]:
+    """
+    Build a numbered context string and mapping for AI activity selection.
+    Returns (context_string, {number: document}).
+    """
+    if not activities:
+        return "(No activities available yet.)", {}
+
+    lines: list[str] = []
+    mapping: Dict[int, BaseIngredient] = {}
+    for idx, activity in enumerate(activities, start=1):
+        loc = f" [{activity.location}]" if activity.location else ""
+        desc = activity.short_descp or activity.title
+        lines.append(f"{idx}. {activity.title}{loc} — {desc}")
+        mapping[idx] = activity
+    return "\n".join(lines), mapping
+
+
+# ── Endpoint ───────────────────────────────────────────────────────────────────
+
 @router.get(
     "/",
-    summary="Get personalised Gita verse and reflections",
+    summary="Get personalised spiritual recipe",
     response_description=(
-        "A 2-element array: [GitaVerse, Reflection]. "
-        "GitaVerse contains the verse selected by OpenAI + 3 mood-adaptive inferences. "
-        "Reflection contains 3 therapist-style reflection questions. "
-        "If the verse is not in the database, it will have chapter/verse_number + inferences "
-        "but other fields (sanskrit_text, etc.) will be empty."
+        "A keyed JSON object with four categories: gita, punya, breathing, "
+        "reflections. Includes `dummy_data: true` when OpenAI is disabled."
     ),
 )
 async def get_recipe(
@@ -63,79 +100,146 @@ async def get_recipe(
         ),
     ),
     current_user: User = Depends(get_current_user),
-    openai_service: OpenAIService = Depends(get_openai_service),
-) -> List[Dict[str, Any]]:
+    openai_service: BaseOpenAIService = Depends(get_openai_service),
+) -> Dict[str, Any]:
     """
-    Returns a Bhagavad Gita verse + reflections tailored to the user's mood.
+    Returns a 4-category spiritual recipe tailored to the user's mood.
 
     Flow:
-      1. Query OpenAI for the best verse + inferences + questions
-      2. Lookup the verse in the database by chapter.verse_number
-      3. Create a Reflection ingredient with AI insights
-      4. Return both as a 2-element JSON array
-
-    If the verse is not found in the database, returns chapter/verse_number
-    with empty text fields (sanskrit_text, transliteration, english_translation, commentary).
+      1. Load all PUNYA and BREATHING activities from DB
+      2. Build context strings for the AI
+      3. Call AI service (real or mock)
+      4. Merge DB records with AI-generated insights
+      5. Return keyed response with gita, punya, breathing, reflections
     """
+    storage = get_storage_service()
 
+    # ── 1. Load available activities from DB ──────────────────────────────────
+    punya_docs = await Punya.find_all().to_list()
+    breathing_docs = await Breathing.find_all().to_list()
+
+    punya_context, punya_map = _build_activity_context(punya_docs)
+    breathing_context, breathing_map = _build_activity_context(breathing_docs)
+
+    # ── 2. Call AI service ────────────────────────────────────────────────────
     try:
-        # 1. Call OpenAI to get verse recommendation + reflections
-        ai_guidance = await openai_service.generate_gita_guidance(mood, feelings)
-
-        # Extract verse reference
-        chapter = ai_guidance["chapter"]
-        verse_number = ai_guidance["verse_number"]
-        inferences = ai_guidance["inferences"]
-        reflection_questions = ai_guidance["reflection_questions"]
-
+        ai_recipe = await openai_service.generate_dharma_recipe(
+            mood=mood,
+            feelings=feelings,
+            punya_context=punya_context,
+            breathing_context=breathing_context,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate Gita guidance: {str(e)}",
+            detail=f"Failed to generate recipe: {str(e)}",
         ) from e
 
-    # 2. Query for the GitaVerse in database
+    is_dummy = ai_recipe.get("dummy_data", False)
+
+    # ── 3. Process GITA ──────────────────────────────────────────────────────
+    gita_ai = ai_recipe["gita"]
+    chapter = gita_ai["chapter"]
+    verse_number = gita_ai["verse_number"]
+
     gita_verse = await GitaVerse.find_one(
-        {
+        {"chapter": chapter, "verse_number": verse_number}
+    )
+
+    if gita_verse:
+        # Overlay AI-generated fields onto the DB document
+        gita_verse.deeper_insights_title = gita_ai.get("deeper_insights_title")
+        gita_verse.deeper_insights = [
+            DeeperInsight(**di) for di in gita_ai.get("deeper_insights", [])
+        ]
+        gita_dict = gita_verse.model_dump(mode="json")
+        gita_dict = await storage.sign_media_fields(gita_dict)
+        gita_dict["is_placeholder"] = False
+    else:
+        # Verse not in our DB — return AI insights with placeholder DB fields
+        gita_dict = {
+            "activity_type": "GITA",
+            "title": f"Bhagavad Gita {chapter}.{verse_number}",
+            "emoji": "🕉️",
+            "subtitle": "Full verse details coming soon",
+            "why": "This verse was selected by AI as relevant to your current mood.",
             "chapter": chapter,
             "verse_number": verse_number,
+            "deeper_insights_title": gita_ai.get("deeper_insights_title"),
+            "deeper_insights": gita_ai.get("deeper_insights", []),
+            "sanskrit_text": "Verse text will be available soon",
+            "transliteration": None,
+            "english_translation": "Translation is being added to our library",
+            "commentary": "Commentary is being added to our library",
+            "audio_url": "",
+            "icon_url": "",
+            "is_placeholder": True,
         }
-    )
 
-    # If not found, create a minimal GitaVerse with just the reference
-    if not gita_verse:
-        gita_verse = GitaVerse(
-            title=f"Bhagavad Gita {chapter}.{verse_number}",
-            why="This verse was selected by AI as relevant to your current mood.",
-            chapter=chapter,
-            verse_number=verse_number,
-            inferences=inferences,
-            # Leave text fields as None (optional fields in updated model)
-        )
+    # ── 4. Process PUNYA ──────────────────────────────────────────────────────
+    punya_ai = ai_recipe["punya"]
+    selected_punya_num = punya_ai.get("selected_number", 1)
+    punya_doc = punya_map.get(selected_punya_num)
+
+    if punya_doc:
+        punya_doc.ai_why = punya_ai.get("why")
+        punya_doc.ai_impact = [
+            ImpactPointer(**ip) for ip in punya_ai.get("impact", [])
+        ]
+        punya_dict = punya_doc.model_dump(mode="json")
+        punya_dict = await storage.sign_media_fields(punya_dict)
     else:
-        # Populate inferences on the fetched verse
-        gita_verse.inferences = inferences
+        # No matching PUNYA doc — return AI-only data
+        punya_dict = {
+            "activity_type": "PUNYA",
+            "title": "Act of Kindness",
+            "emoji": "💛",
+            "subtitle": "",
+            "why": "Prosocial behaviour is the foundation of Dharma.",
+            "activity": "",
+            "ai_why": punya_ai.get("why", ""),
+            "ai_impact": punya_ai.get("impact", []),
+            "icon_url": "",
+        }
 
-    # 3. Create Reflection ingredient with AI-generated questions
-    reflection = Reflection(
-        title=f"Reflections on Gita {chapter}.{verse_number}",
-        why="Personalized reflection questions generated by OpenAI based on your mood and the selected verse.",
-        reflection_questions=reflection_questions,
-    )
+    # ── 5. Process BREATHING ──────────────────────────────────────────────────
+    breathing_ai = ai_recipe["breathing"]
+    selected_breathing_num = breathing_ai.get("selected_number", 1)
+    breathing_doc = breathing_map.get(selected_breathing_num)
 
-    # 4. Prepare response (sign media URLs for both ingredients)
-    storage = get_storage_service()
-    result = []
+    if breathing_doc:
+        breathing_doc.ai_why = breathing_ai.get("why")
+        breathing_doc.ai_impact = [
+            ImpactPointer(**ip) for ip in breathing_ai.get("impact", [])
+        ]
+        breathing_dict = breathing_doc.model_dump(mode="json")
+        breathing_dict = await storage.sign_media_fields(breathing_dict)
+    else:
+        # No matching BREATHING doc — return AI-only data
+        breathing_dict = {
+            "activity_type": "BREATHING",
+            "title": "Breathing Exercise",
+            "emoji": "🧘",
+            "subtitle": "",
+            "why": "Controlled breathing activates the vagus nerve.",
+            "ai_why": breathing_ai.get("why", ""),
+            "ai_impact": breathing_ai.get("impact", []),
+            "icon_url": "",
+        }
 
-    # Add GitaVerse
-    gita_dict = gita_verse.model_dump(mode="json")
-    gita_dict = await storage.sign_media_fields(gita_dict)
-    result.append(gita_dict)
+    # ── 6. Process REFLECTIONS ────────────────────────────────────────────────
+    reflections_ai = ai_recipe.get("reflections", [])
+    reflections_list = [
+        {"emoji": r.get("emoji", "🪷"), "question": r.get("question", "")}
+        for r in reflections_ai
+    ]
 
-    # Add Reflection
-    reflection_dict = reflection.model_dump(mode="json")
-    reflection_dict = await storage.sign_media_fields(reflection_dict)
-    result.append(reflection_dict)
-
-    return result
+    # ── 7. Assemble final response ────────────────────────────────────────────
+    return {
+        "gita": gita_dict,
+        "punya": punya_dict,
+        "breathing": breathing_dict,
+        "reflections": reflections_list,
+        "dummy_data": is_dummy,
+    }
 

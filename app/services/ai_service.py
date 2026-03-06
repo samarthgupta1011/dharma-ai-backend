@@ -56,7 +56,7 @@ class AIEngine(ABC):
         Returns:
             A heterogeneous list of BaseIngredient subclass instances.
             Each element may be a GitaVerse, Yoga, Breathing, Chanting,
-            GoodDeed, or Story document.
+            Punya, or Story document.
         """
         raise NotImplementedError
 
@@ -82,7 +82,7 @@ class MockAIEngine(AIEngine):
     ) -> List[BaseIngredient]:
         """
         Returns a fixed-order recipe: one of each ingredient type.
-        Order: YOGA → BREATHING → GITA → MANTRA → GOOD_DEED → STORY
+        Order: YOGA → BREATHING → GITA → MANTRA → PUNYA → STORY
         """
         recipe: List[BaseIngredient] = []
 
@@ -92,7 +92,7 @@ class MockAIEngine(AIEngine):
             ActivityType.BREATHING,
             ActivityType.GITA,
             ActivityType.MANTRA,
-            ActivityType.GOOD_DEED,
+            ActivityType.PUNYA,
             ActivityType.STORY,
         ]
 

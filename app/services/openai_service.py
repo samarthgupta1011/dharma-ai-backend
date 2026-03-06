@@ -1,235 +1,272 @@
 """
 app/services/openai_service.py
 ──────────────────────────────
-Service for generating Bhagavad Gita verse recommendations and psychological reflections
-using OpenAI's API (GPT-4o-mini) or mock data.
+Service for generating personalised spiritual recipes using OpenAI's API
+or deterministic mock data (when ENABLE_OPENAI is false).
 
 Architecture:
   • `BaseOpenAIService`: Abstract base class defining the interface
-  • `OpenAIService`: Production class making real OpenAI API calls
-  • `MockOpenAIService`: Development class returning hardcoded mock data (no API call)
-  • `get_openai_service()`: Factory that returns appropriate service based on ENABLE_OPENAI flag
+  • `OpenAIService`: Production class making real OpenAI API calls with
+    guardrails enforced via a system prompt
+  • `MockOpenAIService`: Development class returning hardcoded dummy data
+    (no API call). All text fields are suffixed with _DUMMY_ and the
+    response includes `dummy_data: true` so callers can detect it.
+  • `get_openai_service()`: Factory that returns the appropriate service
+    based on the ENABLE_OPENAI flag.
 
 Design decisions:
-  • Uses strategy pattern for transparent switching between real and mock implementations
-  • Mock service has identical interface, so calling code doesn't change
-  • Async/await with httpx to avoid blocking the event loop (real service only)
-  • Singleton per-process instance with a single OpenAI client
-  • Errors are descriptive and include guidance for debugging
+  • Uses strategy pattern for transparent switching between real and mock
+  • System prompt contains strict guardrails (Hindu scriptures only, no
+    self-harm, safe emojis, etc.) — defined in app/prompts/dharma_prompts.py
+  • User prompt is the recipe-generation template with mood, feelings,
+    and available activities injected at call time
+  • Async/await with OpenAI's AsyncOpenAI to avoid blocking the event loop
 """
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from openai import AsyncOpenAI
 
 from app.config.settings import get_settings
+from app.prompts.dharma_prompts import RECIPE_PROMPT_TEMPLATE, SYSTEM_PROMPT
 
 
 # ── Interface (Abstract Base Class) ────────────────────────────────────────────
 
 class BaseOpenAIService(ABC):
-    """Abstract base class for Gita guidance services."""
+    """Abstract base class for dharma recipe generation services."""
 
     @abstractmethod
-    async def generate_gita_guidance(
+    async def generate_dharma_recipe(
         self,
         mood: str,
         feelings: str = "",
+        punya_context: str = "",
+        breathing_context: str = "",
     ) -> Dict[str, Any]:
-        """Generate Gita verse recommendation with inferences and reflection questions."""
+        """
+        Generate a full spiritual recipe with 4 categories:
+        gita, punya, breathing, reflections.
+        """
         pass
 
 
 # ── Production Service ─────────────────────────────────────────────────────────
 
 class OpenAIService(BaseOpenAIService):
-    """Production service using OpenAI API."""
+    """Production service using OpenAI API with guardrails."""
 
     def __init__(self, client: AsyncOpenAI) -> None:
         """Initialize with AsyncOpenAI client."""
         self.client = client
 
-    async def generate_gita_guidance(
+    async def generate_dharma_recipe(
         self,
         mood: str,
         feelings: str = "",
+        punya_context: str = "",
+        breathing_context: str = "",
     ) -> Dict[str, Any]:
-        """Call OpenAI to generate Gita guidance."""
-        feelings_str = f" User detail: {feelings}" if feelings else ""
-        prompt = f"""User mood: {mood}.{feelings_str}
+        """Call OpenAI to generate a full dharma recipe."""
+        feelings_line = f"The user adds: \"{feelings}\"" if feelings else ""
 
-Recommend ONE Gita verse (ch.verse, e.g., 4.24 from chapters 1-18).
-
-Return JSON:
-{{
-  "chapter": <int>,
-  "verse_number": <int>,
-  "inferences": [<3 insights adapted to mood: uplifting if sad, grounding if happy>],
-  "reflection_questions": [<3 open-ended self-reflection questions>]
-}}
-
-Example:
-{{
-  "chapter": 2,
-  "verse_number": 47,
-  "inferences": ["Your duty is the action; not attached to fruit.", "Trust the process.", "Anxiety dissolves with focus on effort."],
-  "reflection_questions": ["What's in your control?", "How would releasing outcomes help?", "What becomes possible by trusting?"]
-}}"""
+        user_prompt = RECIPE_PROMPT_TEMPLATE.format(
+            mood=mood,
+            feelings_line=feelings_line,
+            punya_context=punya_context or "(No punya activities available in database yet.)",
+            breathing_context=breathing_context or "(No breathing exercises available in database yet.)",
+        )
 
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=300,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.6,
+                max_tokens=800,
             )
 
             response_text = response.choices[0].message.content
             if not response_text:
                 raise ValueError("OpenAI returned empty response")
 
-            guidance = json.loads(response_text)
+            # Strip markdown code fences if present
+            cleaned = response_text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
 
-            # Validate response structure
-            required_keys = {"chapter", "verse_number", "inferences", "reflection_questions"}
-            if not required_keys.issubset(guidance.keys()):
-                raise ValueError(f"Missing required keys in OpenAI response")
-
-            if not isinstance(guidance["chapter"], int) or not (1 <= guidance["chapter"] <= 18):
-                raise ValueError(f"Invalid chapter: {guidance['chapter']}")
-
-            if not isinstance(guidance["verse_number"], int) or guidance["verse_number"] < 1:
-                raise ValueError(f"Invalid verse_number: {guidance['verse_number']}")
-
-            if not isinstance(guidance["inferences"], list) or len(guidance["inferences"]) != 3:
-                raise ValueError(f"Expected 3 inferences")
-
-            if not isinstance(guidance["reflection_questions"], list) or len(guidance["reflection_questions"]) != 3:
-                raise ValueError(f"Expected 3 reflection questions")
-
-            return guidance
+            recipe = json.loads(cleaned)
+            _validate_recipe(recipe)
+            return recipe
 
         except json.JSONDecodeError as e:
             raise ValueError(f"OpenAI response is not valid JSON: {e}") from e
         except Exception as e:
+            if isinstance(e, ValueError):
+                raise
             raise ValueError(f"OpenAI API call failed: {e}") from e
 
 
 # ── Mock Service (Development) ─────────────────────────────────────────────────
 
 class MockOpenAIService(BaseOpenAIService):
-    """Mock service returning hardcoded data (ENABLE_OPENAI=false)."""
+    """
+    Mock service returning hardcoded dummy data (ENABLE_OPENAI=false).
 
-    async def generate_gita_guidance(
+    All text fields are suffixed with ' _DUMMY_' and the top-level
+    response includes `"dummy_data": true` so the frontend / tests
+    can detect that this is not real AI output.
+    """
+
+    async def generate_dharma_recipe(
         self,
         mood: str,
         feelings: str = "",
+        punya_context: str = "",
+        breathing_context: str = "",
     ) -> Dict[str, Any]:
-        """Return mock guidance data based on mood."""
-        return self._get_mock_guidance(mood)
+        """Return mood-aware dummy recipe data."""
+        return self._get_mock_recipe(mood)
 
     @staticmethod
-    def _get_mock_guidance(mood: str) -> Dict[str, Any]:
-        """Select mock guidance based on mood pattern matching."""
+    def _get_mock_recipe(mood: str) -> Dict[str, Any]:
+        """Select mock recipe based on mood pattern matching."""
         mood_lower = mood.lower()
 
-        if any(word in mood_lower for word in ["anxious", "stress", "worry", "fear", "nervous"]):
-            return {
-                "chapter": 2,
-                "verse_number": 47,
-                "inferences": [
-                    "Your only right is to perform your duty; the fruits of action are not your concern.",
-                    "Let go of attachment to outcomes and focus on the quality of effort.",
-                    "This mindset transforms anxiety into purposeful, grounded action.",
-                ],
-                "reflection_questions": [
-                    "What actions are truly within your control right now?",
-                    "How might your anxiety shift if you focused only on the process, not the result?",
-                    "What would become possible if you trusted the unfolding of your path?",
-                ],
-            }
-
-        elif any(word in mood_lower for word in ["sad", "depressed", "lost", "hopeless", "empty"]):
-            return {
-                "chapter": 10,
-                "verse_number": 20,
-                "inferences": [
-                    "I am the self within all beings; you are never truly isolated.",
-                    "Your essence is eternal and unchanging despite temporary sorrows.",
-                    "This recognition transforms despair into a sense of belonging.",
-                ],
-                "reflection_questions": [
-                    "What part of you remains untouched by this sadness?",
-                    "How might you connect with something larger than this moment?",
-                    "What light persists within you, even now?",
-                ],
-            }
-
-        elif any(word in mood_lower for word in ["grateful", "happy", "joyful", "peaceful", "content"]):
-            return {
-                "chapter": 12,
-                "verse_number": 13,
-                "inferences": [
-                    "Ground your joy in compassion and service, not circumstance.",
-                    "Equanimity deepens happiness—holding it lightly, sharing it freely.",
-                    "This stability prevents joy from turning into attachment or fear of loss.",
-                ],
-                "reflection_questions": [
-                    "How can you share or ground this happiness in service?",
-                    "What would it mean to hold this joy without grasping?",
-                    "How might you deepen this peace through compassion for others?",
-                ],
-            }
-
-        elif any(word in mood_lower for word in ["confused", "uncertain", "lost", "unclear"]):
-            return {
-                "chapter": 2,
-                "verse_number": 7,
-                "inferences": [
-                    "Clarity comes from engaged action with full awareness, not endless thinking.",
-                    "Confusion dissolves when you align intention with purposeful effort.",
-                    "Trust that moving forward with integrity reveals the path ahead.",
-                ],
-                "reflection_questions": [
-                    "What is one small, clear action you can take today?",
-                    "How might taking aligned action clarify your direction?",
-                    "What part of this situation needs your presence, not your planning?",
-                ],
-            }
-
-        elif any(word in mood_lower for word in ["angry", "frustrated", "resentful", "upset"]):
-            return {
-                "chapter": 2,
-                "verse_number": 63,
-                "inferences": [
-                    "Anger clouds judgment; observe it without acting from it.",
-                    "The gap between impulse and action is where wisdom lives.",
-                    "Breathe, pause, and respond from your higher self, not reaction.",
-                ],
-                "reflection_questions": [
-                    "What legitimate need or boundary is your anger protecting?",
-                    "How might you honor that need without destructive action?",
-                    "What would responding from clarity, not anger, look like?",
-                ],
-            }
-
+        # Pick chapter/verse and tone based on mood
+        if any(w in mood_lower for w in ["anxious", "stress", "worry", "fear", "nervous"]):
+            chapter, verse = 2, 47
+            gita_title = "Release attachment to outcomes _DUMMY_"
+            tone = "calming"
+        elif any(w in mood_lower for w in ["sad", "depressed", "lost", "hopeless", "empty"]):
+            chapter, verse = 10, 20
+            gita_title = "You are never truly alone _DUMMY_"
+            tone = "uplifting"
+        elif any(w in mood_lower for w in ["grateful", "happy", "joyful", "peaceful", "content"]):
+            chapter, verse = 12, 13
+            gita_title = "Ground your joy in compassion _DUMMY_"
+            tone = "grounding"
+        elif any(w in mood_lower for w in ["angry", "frustrated", "resentful", "upset"]):
+            chapter, verse = 2, 63
+            gita_title = "Stillness between impulse and action _DUMMY_"
+            tone = "soothing"
+        elif any(w in mood_lower for w in ["confused", "uncertain", "unclear"]):
+            chapter, verse = 2, 7
+            gita_title = "Clarity comes from purposeful action _DUMMY_"
+            tone = "clarifying"
         else:
-            return {
-                "chapter": 2,
-                "verse_number": 15,
-                "inferences": [
-                    "Both pleasure and pain are temporary visitors; neither defines you.",
-                    "Witness your emotions without being swept away by them.",
-                    "This inner steadiness is your natural state, beneath the storm.",
+            chapter, verse = 2, 15
+            gita_title = "Both pleasure and pain are visitors _DUMMY_"
+            tone = "balancing"
+
+        return {
+            "dummy_data": True,
+            "gita": {
+                "chapter": chapter,
+                "verse_number": verse,
+                "deeper_insights_title": gita_title,
+                "deeper_insights": [
+                    {
+                        "emoji": "🕉️",
+                        "title": f"Inner Steadiness _DUMMY_",
+                        "inference": f"Focus on your duty without attachment to results — this {tone} insight is adapted to your mood _DUMMY_",
+                    },
+                    {
+                        "emoji": "🌿",
+                        "title": f"Present Moment _DUMMY_",
+                        "inference": f"The mind finds peace when anchored in the present, not lost in what-ifs _DUMMY_",
+                    },
+                    {
+                        "emoji": "✨",
+                        "title": f"Eternal Self _DUMMY_",
+                        "inference": f"Your true self is unchanging and untouched by temporary emotional waves _DUMMY_",
+                    },
                 ],
-                "reflection_questions": [
-                    "What in you is unchanged by your current emotions?",
-                    "How can you observe your feelings with kindness and distance?",
-                    "What steadiness or peace are you cultivating within?",
+            },
+            "punya": {
+                "selected_number": 1,
+                "why": f"Small acts of kindness release oxytocin and serotonin, grounding your {tone} state in service _DUMMY_",
+                "impact": [
+                    {
+                        "emoji": "💛",
+                        "point": "Triggers the helper's high — serotonin and dopamine flood your reward pathways _DUMMY_",
+                    },
+                    {
+                        "emoji": "🌻",
+                        "point": "Strengthens neural pathways associated with compassion and social bonding _DUMMY_",
+                    },
                 ],
-            }
+            },
+            "breathing": {
+                "selected_number": 1,
+                "why": f"Controlled breathing activates your vagus nerve, shifting you from fight-or-flight to calm _DUMMY_",
+                "impact": [
+                    {
+                        "emoji": "🧘",
+                        "point": "Heart rate variability improves within 90 seconds of slow breathing _DUMMY_",
+                    },
+                    {
+                        "emoji": "🌊",
+                        "point": "Cortisol levels drop as your parasympathetic nervous system activates _DUMMY_",
+                    },
+                ],
+            },
+            "reflections": [
+                {
+                    "emoji": "🪷",
+                    "question": f"What is one thing within your control right now that deserves your full attention? _DUMMY_",
+                },
+                {
+                    "emoji": "🌸",
+                    "question": f"How might your perspective shift if you approached this moment with curiosity instead of judgment? _DUMMY_",
+                },
+                {
+                    "emoji": "🙏",
+                    "question": f"What would it feel like to release this weight and trust the process of your journey? _DUMMY_",
+                },
+            ],
+        }
+
+
+# ── Validation helper ──────────────────────────────────────────────────────────
+
+def _validate_recipe(recipe: Dict[str, Any]) -> None:
+    """Validate the structure of an AI-generated recipe response."""
+    required_keys = {"gita", "punya", "breathing", "reflections"}
+    if not required_keys.issubset(recipe.keys()):
+        missing = required_keys - set(recipe.keys())
+        raise ValueError(f"Missing required keys in AI response: {missing}")
+
+    # Gita validation
+    gita = recipe["gita"]
+    if not isinstance(gita.get("chapter"), int) or not (1 <= gita["chapter"] <= 18):
+        raise ValueError(f"Invalid gita.chapter: {gita.get('chapter')}")
+    if not isinstance(gita.get("verse_number"), int) or gita["verse_number"] < 1:
+        raise ValueError(f"Invalid gita.verse_number: {gita.get('verse_number')}")
+    if not isinstance(gita.get("deeper_insights"), list) or len(gita["deeper_insights"]) != 3:
+        raise ValueError("Expected exactly 3 gita.deeper_insights")
+
+    # Punya validation
+    punya = recipe["punya"]
+    if not isinstance(punya.get("selected_number"), int):
+        raise ValueError(f"Invalid punya.selected_number: {punya.get('selected_number')}")
+
+    # Breathing validation
+    breathing = recipe["breathing"]
+    if not isinstance(breathing.get("selected_number"), int):
+        raise ValueError(f"Invalid breathing.selected_number: {breathing.get('selected_number')}")
+
+    # Reflections validation
+    reflections = recipe["reflections"]
+    if not isinstance(reflections, list) or len(reflections) != 3:
+        raise ValueError("Expected exactly 3 reflections")
 
 
 # ── Factory / Dependency Injection ─────────────────────────────────────────────

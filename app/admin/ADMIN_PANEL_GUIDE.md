@@ -87,12 +87,12 @@ Returns:
 
 | Type | Required | Optional | Media |
 |------|----------|----------|-------|
-| GITA | title, why, sanskrit_text, transliteration, english_translation, commentary | tags, icon_url | audio_url, icon_url |
-| YOGA | title, why | icon_url, gif_url, steps, anatomical_focus, tags | gif_url, icon_url |
-| BREATHING | title, why | icon_url, audio_url, duration_seconds, pattern, tags | audio_url, icon_url |
-| MANTRA | title, why | icon_url, audio_url, mantra_text, frequency_hz, tags | audio_url, icon_url |
-| GOOD_DEED | title, why | icon_url, task_description, impact_logic, tags | icon_url |
-| STORY | title, why | icon_url, image_url, story_text, scripture_source, tags | image_url, icon_url |
+| GITA | title, why | emoji, subtitle, duration_mins, location, short_descp, chapter, verse_number, sanskrit_text, transliteration, english_translation, commentary, tags, icon_url | audio_url, icon_url |
+| YOGA | title, why | emoji, subtitle, duration_mins, location, short_descp, icon_url, gif_url, steps, anatomical_focus, tags | gif_url, icon_url |
+| BREATHING | title, why | emoji, subtitle, duration_mins, location, short_descp, icon_url, audio_url, duration_seconds, pattern, animation, tags | audio_url, icon_url |
+| MANTRA | title, why | emoji, subtitle, duration_mins, location, short_descp, icon_url, audio_url, mantra_text, frequency_hz, tags | audio_url, icon_url |
+| PUNYA | title, why | emoji, subtitle, duration_mins, location, short_descp, activity, icon_url, tags | icon_url |
+| STORY | title, why | emoji, subtitle, duration_mins, location, short_descp, icon_url, image_url, story_text, scripture_source, tags | image_url, icon_url |
 
 ## Key Features
 

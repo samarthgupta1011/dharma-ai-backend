@@ -6,7 +6,7 @@ API endpoints work out-of-the-box without manual data entry.
 
 Seeds:
   • One ingredient document of every ActivityType
-    (GitaVerse, Yoga, Breathing, Chanting, GoodDeed, Story)
+    (GitaVerse, Yoga, Breathing, Chanting, Punya, Story)
   • DailyPanchang entries for Mumbai and Delhi for the next 7 days
 
 Usage (from the project root):
@@ -33,7 +33,7 @@ from app.models.ingredients import (
     Breathing,
     Chanting,
     GitaVerse,
-    GoodDeed,
+    Punya,
     Story,
     Yoga,
 )
@@ -48,6 +48,11 @@ from app.models.user import User
 def _gita_verse() -> GitaVerse:
     return GitaVerse(
         title="Bhagavad Gita 2.47 — On Action Without Attachment",
+        emoji="📖",
+        subtitle="Karmanye vadhikaraste",
+        duration_mins=5,
+        chapter=2,
+        verse_number=47,
         why=(
             "Modern psychology calls this 'process focus' versus 'outcome focus'. "
             "Research (Dweck, 2006) shows that process-focused individuals exhibit "
@@ -102,6 +107,11 @@ def _yoga() -> Yoga:
 def _breathing() -> Breathing:
     return Breathing(
         title="Nadi Shodhana — Alternate Nostril Breathing",
+        emoji="🧘",
+        subtitle="Balance your hemispheres",
+        duration_mins=5,
+        location="anywhere",
+        short_descp="Alternate nostril breathing to balance brain hemispheres and reduce anxiety",
         why=(
             "Alternating nostril breathing balances activity between the left "
             "(parasympathetic) and right (sympathetic) hemispheres of the brain.  "
@@ -114,6 +124,7 @@ def _breathing() -> Breathing:
         audio_url="",
         duration_seconds=300,
         pattern="4-0-4-0",
+        animation=1,
     )
 
 
@@ -134,9 +145,18 @@ def _chanting() -> Chanting:
     )
 
 
-def _good_deed() -> GoodDeed:
-    return GoodDeed(
+def _punya() -> Punya:
+    return Punya(
         title="Pay for a stranger's chai",
+        emoji="🌻",
+        subtitle="A small act of kindness",
+        duration_mins=5,
+        location="anywhere",
+        short_descp="Pay for a stranger's tea or donate a small amount via UPI",
+        activity=(
+            "Next time you're at a tea stall or cafe, pay for the person behind you. "
+            "If you're working from home, transfer ₹20 to a local street vendor via UPI."
+        ),
         why=(
             "Prosocial spending — spending money on others rather than yourself — "
             "activates the nucleus accumbens (reward centre) more strongly than "
@@ -146,15 +166,6 @@ def _good_deed() -> GoodDeed:
         ),
         tags={"sad": 0.9, "lost": 0.8, "grateful": 0.85, "angry": 0.6},
         icon_url="",
-        task_description=(
-            "Next time you're at a tea stall or cafe, pay for the person behind you. "
-            "If you're working from home, transfer ₹20 to a local street vendor via UPI."
-        ),
-        impact_logic=(
-            "This activates the 'helper's high' — a documented neurochemical state "
-            "involving serotonin, oxytocin, and dopamine.  The effect is stronger "
-            "when the act is spontaneous and costs you something tangible."
-        ),
     )
 
 
@@ -275,7 +286,7 @@ async def seed() -> None:
             Yoga,
             Breathing,
             Chanting,
-            GoodDeed,
+            Punya,
             Story,
             DailyPanchang,
         ],
@@ -283,7 +294,7 @@ async def seed() -> None:
 
     # ── Ingredients ───────────────────────────────────────────────────────────
     print("Seeding ingredients...")
-    for builder in [_gita_verse, _yoga, _breathing, _chanting, _good_deed, _story]:
+    for builder in [_gita_verse, _yoga, _breathing, _chanting, _punya, _story]:
         ingredient = builder()
         existing = await BaseIngredient.find_one(
             BaseIngredient.activity_type == ingredient.activity_type,
