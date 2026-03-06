@@ -55,11 +55,14 @@ outside the JSON object.
 """
 
 # ── Recipe prompt template ────────────────────────────────────────────────────
-# Placeholders: {mood}, {feelings}, {punya_context}, {breathing_context}
+# Placeholders: {mood}, {feelings}, {gita_context}, {punya_context}, {breathing_context}
 
 RECIPE_PROMPT_TEMPLATE = """\
 The user's current mood is: "{mood}"
 {feelings_line}
+
+AVAILABLE GITA VERSES — select ONE by its number:
+{gita_context}
 
 AVAILABLE PUNYA (good-deed) ACTIVITIES — select ONE by its number:
 {punya_context}
@@ -72,8 +75,7 @@ exactly these four keys:
 
 {{
   "gita": {{
-    "chapter": <int 1-18>,
-    "verse_number": <int>,
+    "selected_number": <int — the number from the GITA VERSES list above>,
     "deeper_insights_title": "<one short evocative line, e.g. The ocean doesn't ask the river to stop>",
     "deeper_insights": [
       {{
@@ -130,8 +132,7 @@ exactly these four keys:
 }}
 
 IMPORTANT:
-• Pick a Gita verse (chapter 1-18) that is genuinely relevant to the user's mood.
-• For punya and breathing, pick the activity that best matches the mood.
+• For gita, punya, and breathing, pick the item that best matches the user's mood.
 • Impact arrays should have 1-3 items (prefer 2-3).
 • Reflections should reference the suggested Gita verse, breathing, and punya \
 activities to tie it all together.

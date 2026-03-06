@@ -4,7 +4,7 @@ app/api/routes/recipe.py
 The core personalisation endpoint: GET /recipe
 
 Given a mood keyword and optional free-text feelings, this endpoint:
-  1. Loads available PUNYA and BREATHING activities from the database
+  1. Loads available GITA, PUNYA, and BREATHING activities from the database
      and builds context strings for the AI.
   2. Calls OpenAI (or the mock service) to get a 4-category recipe:
      GITA verse, PUNYA activity, BREATHING exercise, and REFLECTIONS.
@@ -107,7 +107,7 @@ async def get_recipe(
     Returns a 4-category spiritual recipe tailored to the user's mood.
 
     Flow:
-      1. Load all PUNYA and BREATHING activities from DB
+      1. Load all GITA, PUNYA, and BREATHING activities from DB
       2. Build context strings for the AI
       3. Call AI service (real or mock)
       4. Merge DB records with AI-generated insights
@@ -117,9 +117,11 @@ async def get_recipe(
     cache = get_ingredient_cache()
 
     # ── 1. Load available activities (from cache) ─────────────────────────────
+    gita_cached = await cache.get("gita")
     punya_cached = await cache.get("punya")
     breathing_cached = await cache.get("breathing")
 
+    gita_context, gita_map = _build_activity_context(gita_cached)
     punya_context, punya_map = _build_activity_context(punya_cached)
     breathing_context, breathing_map = _build_activity_context(breathing_cached)
 
@@ -128,6 +130,7 @@ async def get_recipe(
     user_prompt = RECIPE_PROMPT_TEMPLATE.format(
         mood=mood,
         feelings_line=feelings_line,
+        gita_context=gita_context or "(No Gita verses available in database yet.)",
         punya_context=punya_context or "(No punya activities available in database yet.)",
         breathing_context=breathing_context or "(No breathing exercises available in database yet.)",
     )
@@ -136,6 +139,7 @@ async def get_recipe(
         ai_recipe = await openai_service.generate_dharma_recipe(
             mood=mood,
             feelings=feelings,
+            gita_context=gita_context,
             punya_context=punya_context,
             breathing_context=breathing_context,
         )
@@ -157,11 +161,10 @@ async def get_recipe(
 
     # ── 3. Process GITA ──────────────────────────────────────────────────────
     gita_ai = ai_recipe["gita"]
-    chapter = gita_ai["chapter"]
-    verse_number = gita_ai["verse_number"]
-
-    gita_verse = await GitaVerse.find_one(
-        {"chapter": chapter, "verse_number": verse_number}
+    selected_gita_num = gita_ai.get("selected_number", 1)
+    gita_cached_item = gita_map.get(selected_gita_num)
+    gita_verse = (
+        await GitaVerse.get(gita_cached_item.id) if gita_cached_item else None
     )
 
     if gita_verse:
@@ -174,15 +177,15 @@ async def get_recipe(
         gita_dict = await storage.sign_media_fields(gita_dict)
         gita_dict["is_placeholder"] = False
     else:
-        # Verse not in our DB — return AI insights with placeholder DB fields
+        # No matching GITA doc — return AI insights with placeholder DB fields
         gita_dict = {
             "activity_type": "GITA",
-            "title": f"Bhagavad Gita {chapter}.{verse_number}",
+            "title": "Bhagavad Gita",
             "emoji": "🕉️",
             "subtitle": "Full verse details coming soon",
             "why": "This verse was selected by AI as relevant to your current mood.",
-            "chapter": chapter,
-            "verse_number": verse_number,
+            "chapter": None,
+            "verse_number": None,
             "deeper_insights_title": gita_ai.get("deeper_insights_title"),
             "deeper_insights": gita_ai.get("deeper_insights", []),
             "sanskrit_text": "Verse text will be available soon",

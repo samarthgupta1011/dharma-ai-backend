@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 
 from beanie import PydanticObjectId
 
-from app.models.ingredients import Breathing, Punya
+from app.models.ingredients import Breathing, GitaVerse, Punya
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +41,13 @@ class CachedIngredient:
 _MODEL_MAP = {
     "punya": Punya,
     "breathing": Breathing,
+    "gita": GitaVerse,
 }
 
 
 class IngredientCache:
     """
-    In-memory TTL cache for PUNYA and BREATHING ingredient summaries.
+    In-memory TTL cache for GITA, PUNYA, and BREATHING ingredient summaries.
 
     Thread-safety note: asyncio is single-threaded so no locking is
     required for dict mutations — only one coroutine runs at a time.

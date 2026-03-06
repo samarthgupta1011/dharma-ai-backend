@@ -25,7 +25,7 @@ Design decisions:
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from openai import AsyncOpenAI
 
@@ -43,6 +43,7 @@ class BaseOpenAIService(ABC):
         self,
         mood: str,
         feelings: str = "",
+        gita_context: str = "",
         punya_context: str = "",
         breathing_context: str = "",
     ) -> Dict[str, Any]:
@@ -66,6 +67,7 @@ class OpenAIService(BaseOpenAIService):
         self,
         mood: str,
         feelings: str = "",
+        gita_context: str = "",
         punya_context: str = "",
         breathing_context: str = "",
     ) -> Dict[str, Any]:
@@ -75,6 +77,7 @@ class OpenAIService(BaseOpenAIService):
         user_prompt = RECIPE_PROMPT_TEMPLATE.format(
             mood=mood,
             feelings_line=feelings_line,
+            gita_context=gita_context or "(No Gita verses available in database yet.)",
             punya_context=punya_context or "(No punya activities available in database yet.)",
             breathing_context=breathing_context or "(No breathing exercises available in database yet.)",
         )
@@ -129,6 +132,7 @@ class MockOpenAIService(BaseOpenAIService):
         self,
         mood: str,
         feelings: str = "",
+        gita_context: str = "",
         punya_context: str = "",
         breathing_context: str = "",
     ) -> Dict[str, Any]:
@@ -140,42 +144,34 @@ class MockOpenAIService(BaseOpenAIService):
         """Select mock recipe based on mood pattern matching."""
         mood_lower = mood.lower()
 
-        # Pick chapter/verse and tone based on mood
+        # Pick tone based on mood (gita selection is now by number, like punya/breathing)
         if any(w in mood_lower for w in ["anxious", "stress", "worry", "fear", "nervous"]):
-            chapter, verse = 2, 47
             gita_title = "Release attachment to outcomes _DUMMY_"
             tone = "calming"
         elif any(w in mood_lower for w in ["low", "sad", "depressed", "hopeless", "empty"]):
-            chapter, verse = 10, 20
             gita_title = "You are never truly alone _DUMMY_"
             tone = "uplifting"
         elif any(w in mood_lower for w in ["scattered", "restless", "distracted", "unfocused"]):
-            chapter, verse = 6, 35
             gita_title = "Tame the restless mind _DUMMY_"
             tone = "focusing"
         elif any(w in mood_lower for w in ["grateful", "happy", "joyful", "thankful"]):
-            chapter, verse = 12, 13
             gita_title = "Ground your joy in compassion _DUMMY_"
             tone = "grounding"
         elif any(w in mood_lower for w in ["tired", "exhausted", "drained", "fatigued"]):
-            chapter, verse = 3, 8
             gita_title = "Honour your body's need for rest _DUMMY_"
             tone = "restorative"
         elif any(w in mood_lower for w in ["curious", "seeking", "exploring", "open"]):
-            chapter, verse = 4, 34
             gita_title = "Seek knowledge with humility _DUMMY_"
             tone = "inspiring"
         else:
             # "not_sure" or anything unrecognised
-            chapter, verse = 2, 15
             gita_title = "Both pleasure and pain are visitors _DUMMY_"
             tone = "balancing"
 
         return {
             "dummy_data": True,
             "gita": {
-                "chapter": chapter,
-                "verse_number": verse,
+                "selected_number": 1,
                 "deeper_insights_title": gita_title,
                 "deeper_insights": [
                     {
@@ -251,10 +247,8 @@ def _validate_recipe(recipe: Dict[str, Any]) -> None:
 
     # Gita validation
     gita = recipe["gita"]
-    if not isinstance(gita.get("chapter"), int) or not (1 <= gita["chapter"] <= 18):
-        raise ValueError(f"Invalid gita.chapter: {gita.get('chapter')}")
-    if not isinstance(gita.get("verse_number"), int) or gita["verse_number"] < 1:
-        raise ValueError(f"Invalid gita.verse_number: {gita.get('verse_number')}")
+    if not isinstance(gita.get("selected_number"), int):
+        raise ValueError(f"Invalid gita.selected_number: {gita.get('selected_number')}")
     if not isinstance(gita.get("deeper_insights"), list) or len(gita["deeper_insights"]) != 3:
         raise ValueError("Expected exactly 3 gita.deeper_insights")
 
