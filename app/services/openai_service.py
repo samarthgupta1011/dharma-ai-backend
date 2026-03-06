@@ -145,23 +145,28 @@ class MockOpenAIService(BaseOpenAIService):
             chapter, verse = 2, 47
             gita_title = "Release attachment to outcomes _DUMMY_"
             tone = "calming"
-        elif any(w in mood_lower for w in ["sad", "depressed", "lost", "hopeless", "empty"]):
+        elif any(w in mood_lower for w in ["low", "sad", "depressed", "hopeless", "empty"]):
             chapter, verse = 10, 20
             gita_title = "You are never truly alone _DUMMY_"
             tone = "uplifting"
-        elif any(w in mood_lower for w in ["grateful", "happy", "joyful", "peaceful", "content"]):
+        elif any(w in mood_lower for w in ["scattered", "restless", "distracted", "unfocused"]):
+            chapter, verse = 6, 35
+            gita_title = "Tame the restless mind _DUMMY_"
+            tone = "focusing"
+        elif any(w in mood_lower for w in ["grateful", "happy", "joyful", "thankful"]):
             chapter, verse = 12, 13
             gita_title = "Ground your joy in compassion _DUMMY_"
             tone = "grounding"
-        elif any(w in mood_lower for w in ["angry", "frustrated", "resentful", "upset"]):
-            chapter, verse = 2, 63
-            gita_title = "Stillness between impulse and action _DUMMY_"
-            tone = "soothing"
-        elif any(w in mood_lower for w in ["confused", "uncertain", "unclear"]):
-            chapter, verse = 2, 7
-            gita_title = "Clarity comes from purposeful action _DUMMY_"
-            tone = "clarifying"
+        elif any(w in mood_lower for w in ["tired", "exhausted", "drained", "fatigued"]):
+            chapter, verse = 3, 8
+            gita_title = "Honour your body's need for rest _DUMMY_"
+            tone = "restorative"
+        elif any(w in mood_lower for w in ["curious", "seeking", "exploring", "open"]):
+            chapter, verse = 4, 34
+            gita_title = "Seek knowledge with humility _DUMMY_"
+            tone = "inspiring"
         else:
+            # "not_sure" or anything unrecognised
             chapter, verse = 2, 15
             gita_title = "Both pleasure and pain are visitors _DUMMY_"
             tone = "balancing"
