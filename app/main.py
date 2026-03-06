@@ -42,6 +42,7 @@ from app.models.ingredients import (
     Yoga,
 )
 from app.models.panchang import DailyPanchang
+from app.models.recipe_request import RecipeRequest
 from app.models.user import User
 
 settings = get_settings()
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             Story,
             Reflection,
             DailyPanchang,
+            RecipeRequest,
         ],
     )
 

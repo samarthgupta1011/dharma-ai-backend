@@ -767,3 +767,38 @@ async def upload_media(
         "blob_path": blob_path,
         "signed_url": signed_url,
     }
+
+
+# ── Cache management ──────────────────────────────────────────────────────────
+
+@router.post(
+    "/cache/invalidate",
+    summary="Invalidate ingredient cache",
+    response_description="Lists the cache keys that were invalidated.",
+)
+async def invalidate_ingredient_cache(
+    activity_type: Optional[str] = Query(
+        default=None,
+        description=(
+            "Activity type to invalidate (e.g. PUNYA, BREATHING). "
+            "If omitted, the entire ingredient cache is cleared."
+        ),
+    ),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Manually invalidate the in-memory ingredient cache.
+
+    Use this after data ingestion from scripts, direct DB inserts,
+    or any path outside the admin portal.  The next call to
+    GET /recipe will re-fetch fresh data from MongoDB.
+    """
+    from app.services.ingredient_cache import get_ingredient_cache
+
+    cache = get_ingredient_cache()
+    invalidated = cache.invalidate(activity_type)
+
+    return {
+        "invalidated": activity_type or "all",
+        "keys_cleared": invalidated,
+    }

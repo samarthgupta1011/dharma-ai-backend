@@ -28,25 +28,24 @@ Fallback behaviour:
     marks `is_placeholder: true` on the gita object with helper text.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_current_user
 from app.models.ingredients import (
-    BaseIngredient,
     Breathing,
     DeeperInsight,
     GitaVerse,
     ImpactPointer,
     Punya,
-    Reflection,
-    ReflectionQuestion,
 )
+from app.models.recipe_request import RecipeRequest
 from app.models.user import User
+from app.services.ingredient_cache import CachedIngredient, get_ingredient_cache
 from app.services.openai_service import BaseOpenAIService, get_openai_service
 from app.services.storage_service import get_storage_service
+from app.prompts.dharma_prompts import RECIPE_PROMPT_TEMPLATE
 
 router = APIRouter(prefix="/recipe", tags=["Recipe"])
 
@@ -54,21 +53,23 @@ router = APIRouter(prefix="/recipe", tags=["Recipe"])
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _build_activity_context(
-    activities: List[BaseIngredient],
-) -> tuple[str, Dict[int, BaseIngredient]]:
+    activities: List[CachedIngredient],
+) -> tuple[str, Dict[int, CachedIngredient]]:
     """
     Build a numbered context string and mapping for AI activity selection.
-    Returns (context_string, {number: document}).
+
+    Uses lightweight CachedIngredient projections (id, short_descp, location)
+    rather than full DB documents.
+    Returns (context_string, {number: cached_item}).
     """
     if not activities:
         return "(No activities available yet.)", {}
 
     lines: list[str] = []
-    mapping: Dict[int, BaseIngredient] = {}
+    mapping: Dict[int, CachedIngredient] = {}
     for idx, activity in enumerate(activities, start=1):
         loc = f" [{activity.location}]" if activity.location else ""
-        desc = activity.short_descp or activity.title
-        lines.append(f"{idx}. {activity.title}{loc} — {desc}")
+        lines.append(f"{idx}.{loc} {activity.short_descp}")
         mapping[idx] = activity
     return "\n".join(lines), mapping
 
@@ -113,15 +114,24 @@ async def get_recipe(
       5. Return keyed response with gita, punya, breathing, reflections
     """
     storage = get_storage_service()
+    cache = get_ingredient_cache()
 
-    # ── 1. Load available activities from DB ──────────────────────────────────
-    punya_docs = await Punya.find_all().to_list()
-    breathing_docs = await Breathing.find_all().to_list()
+    # ── 1. Load available activities (from cache) ─────────────────────────────
+    punya_cached = await cache.get("punya")
+    breathing_cached = await cache.get("breathing")
 
-    punya_context, punya_map = _build_activity_context(punya_docs)
-    breathing_context, breathing_map = _build_activity_context(breathing_docs)
+    punya_context, punya_map = _build_activity_context(punya_cached)
+    breathing_context, breathing_map = _build_activity_context(breathing_cached)
 
-    # ── 2. Call AI service ────────────────────────────────────────────────────
+    # ── 2. Build user prompt & call AI service ────────────────────────────────
+    feelings_line = f'The user adds: "{feelings}"' if feelings else ""
+    user_prompt = RECIPE_PROMPT_TEMPLATE.format(
+        mood=mood,
+        feelings_line=feelings_line,
+        punya_context=punya_context or "(No punya activities available in database yet.)",
+        breathing_context=breathing_context or "(No breathing exercises available in database yet.)",
+    )
+
     try:
         ai_recipe = await openai_service.generate_dharma_recipe(
             mood=mood,
@@ -136,6 +146,14 @@ async def get_recipe(
         ) from e
 
     is_dummy = ai_recipe.get("dummy_data", False)
+
+    # ── 2b. Log recipe request ────────────────────────────────────────────────
+    await RecipeRequest(
+        user_id=str(current_user.id),
+        mood=mood,
+        feelings=feelings,
+        prompt=user_prompt,
+    ).insert()
 
     # ── 3. Process GITA ──────────────────────────────────────────────────────
     gita_ai = ai_recipe["gita"]
@@ -179,7 +197,10 @@ async def get_recipe(
     # ── 4. Process PUNYA ──────────────────────────────────────────────────────
     punya_ai = ai_recipe["punya"]
     selected_punya_num = punya_ai.get("selected_number", 1)
-    punya_doc = punya_map.get(selected_punya_num)
+    punya_cached_item = punya_map.get(selected_punya_num)
+    punya_doc = (
+        await Punya.get(punya_cached_item.id) if punya_cached_item else None
+    )
 
     if punya_doc:
         punya_doc.ai_why = punya_ai.get("why")
@@ -205,7 +226,12 @@ async def get_recipe(
     # ── 5. Process BREATHING ──────────────────────────────────────────────────
     breathing_ai = ai_recipe["breathing"]
     selected_breathing_num = breathing_ai.get("selected_number", 1)
-    breathing_doc = breathing_map.get(selected_breathing_num)
+    breathing_cached_item = breathing_map.get(selected_breathing_num)
+    breathing_doc = (
+        await Breathing.get(breathing_cached_item.id)
+        if breathing_cached_item
+        else None
+    )
 
     if breathing_doc:
         breathing_doc.ai_why = breathing_ai.get("why")
