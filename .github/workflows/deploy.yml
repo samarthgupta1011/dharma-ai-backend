@@ -98,34 +98,71 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Wait for Container App to be healthy
-          echo "⏳ Waiting for Container App to be healthy..."
-          CONTAINER_APP_FQDN=$(az containerapp show \
-            --name ${{ vars.CONTAINER_APP_NAME }} \
-            --resource-group ${{ vars.RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn \
+          APP="${{ vars.CONTAINER_APP_NAME }}"
+          RG="${{ vars.RESOURCE_GROUP }}"
+
+          # ── 1. Get the latest revision name ─────────────────────────────────
+          echo "⏳ Getting latest revision..."
+          LATEST_REV=$(az containerapp revision list \
+            --name "$APP" --resource-group "$RG" \
+            --query "sort_by([],&properties.createdTime)[-1].name" \
             --output tsv)
+          echo "   Latest revision: ${LATEST_REV}"
 
-          echo "Container App URL: https://${CONTAINER_APP_FQDN}"
+          # ── 2. Wait for the NEW revision to provision (up to 5 min) ─────────
+          echo "⏳ Checking revision provisioning state..."
+          for i in $(seq 1 30); do
+            STATE=$(az containerapp revision show \
+              --name "$APP" --resource-group "$RG" \
+              --revision "$LATEST_REV" \
+              --query "properties.runningState" --output tsv)
 
-          # Retry health check up to 30 times (5 minute timeout)
-          for i in {1..30}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${CONTAINER_APP_FQDN}/health")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Deployment successful! Health check passed."
-              echo "   Status: OK"
-              echo "   URL: https://${CONTAINER_APP_FQDN}"
-              exit 0
+            if [ "$STATE" = "Running" ]; then
+              echo "✅ Revision ${LATEST_REV} is Running"
+              break
+            elif [ "$STATE" = "Failed" ] || [ "$STATE" = "ActivationFailed" ]; then
+              echo "❌ Revision ${LATEST_REV} FAILED (state: ${STATE})"
+              echo ""
+              echo "── Container logs ──"
+              az containerapp logs show \
+                --name "$APP" --resource-group "$RG" \
+                --revision "$LATEST_REV" --tail 50 2>&1 || true
+              exit 1
             fi
-            echo "⏳ Health check attempt $i/30 (HTTP $HTTP_CODE)... Retrying in 10s"
+
+            echo "   Attempt $i/30 — state: ${STATE}… retrying in 10s"
             sleep 10
           done
 
-          echo "❌ Deployment health check failed after 5 minutes"
-          echo "Manual troubleshooting steps:"
-          echo "1. Check Container App logs: az containerapp logs show --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }}"
-          echo "2. Review environment variables: az containerapp show --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }}"
-          echo "3. Rollback if needed: az containerapp update --name ${{ vars.CONTAINER_APP_NAME }} --resource-group ${{ vars.RESOURCE_GROUP }} --image <previous-image>"
+          if [ "$STATE" != "Running" ]; then
+            echo "❌ Revision ${LATEST_REV} did not reach 'Running' within 5 minutes (last state: ${STATE})"
+            az containerapp logs show \
+              --name "$APP" --resource-group "$RG" \
+              --revision "$LATEST_REV" --tail 50 2>&1 || true
+            exit 1
+          fi
+
+          # ── 3. HTTP health check against the FQDN ──────────────────────────
+          FQDN=$(az containerapp show \
+            --name "$APP" --resource-group "$RG" \
+            --query "properties.configuration.ingress.fqdn" --output tsv)
+          echo "⏳ Running HTTP health check on https://${FQDN}/health ..."
+
+          for i in $(seq 1 6); do
+            BODY=$(curl -s --max-time 10 "https://${FQDN}/health" || true)
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${FQDN}/health" || true)
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health check passed (HTTP 200)"
+              echo "   Response: ${BODY}"
+              echo "   URL: https://${FQDN}"
+              exit 0
+            fi
+            echo "   Attempt $i/6 — HTTP ${HTTP_CODE}… retrying in 10s"
+            sleep 10
+          done
+
+          echo "❌ HTTP health check failed (last code: ${HTTP_CODE})"
           exit 1
 
       - name: Deployment summary
