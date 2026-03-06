@@ -35,9 +35,9 @@ User-assigned Managed Identity (UMSI):
 
 from enum import Enum
 from functools import lru_cache
-from typing import List, Union
+from typing import List
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -148,30 +148,25 @@ class Settings(BaseSettings):
     )
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    # Stored as a plain string to avoid pydantic-settings trying json.loads()
+    # on env var values like '*' or comma-separated URLs.
+    # Use get_allowed_origins() to get the parsed List[str].
+    ALLOWED_ORIGINS: str = "*"
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_allowed_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        """Accept '*', a JSON list, or a comma-separated string."""
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            v = v.strip()
-            if v == "*":
-                return ["*"]
-            # Try JSON first (e.g. '["https://example.com"]')
-            if v.startswith("["):
-                import json
-                try:
-                    parsed = json.loads(v)
-                    if isinstance(parsed, list):
-                        return [str(x) for x in parsed]
-                except json.JSONDecodeError:
-                    pass
-            # Fallback: comma-separated
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return ["*"]
+    def get_allowed_origins(self) -> list[str]:
+        """Parse ALLOWED_ORIGINS string into a list for CORSMiddleware."""
+        import json as _json
+        v = self.ALLOWED_ORIGINS.strip()
+        if not v or v == "*":
+            return ["*"]
+        if v.startswith("["):
+            try:
+                parsed = _json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(x) for x in parsed]
+            except _json.JSONDecodeError:
+                pass
+        return [origin.strip() for origin in v.split(",") if origin.strip()]
 
     # ─────────────────────────────────────────────────────────────────────────
 
