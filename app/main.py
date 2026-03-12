@@ -29,7 +29,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.admin.routes import ingredients as admin_ingredients
-from app.admin.routes import cache as admin_cache
 from app.api.routes import auth, cosmic, metadata, recipe, stories, users
 from app.config.settings import get_settings
 from app.models.ingredients import (
@@ -138,7 +137,6 @@ app.include_router(cosmic.router)
 app.include_router(stories.router)
 app.include_router(metadata.router)
 app.include_router(admin_ingredients.router)
-app.include_router(admin_cache.router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

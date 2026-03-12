@@ -28,6 +28,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.models.ingredients import (
     BaseIngredient,
+    BreathPhase,
     Breathing,
     GitaVerse,
     Punya,
@@ -49,14 +50,12 @@ def _gita_verses() -> list[GitaVerse]:
             duration_mins=5,
             chapter=2,
             verse_number=47,
-            short_descp="Chapter 2, Verse 47",
-            location="anywhere",
-            why=(
+            context={"location": "anywhere", "short_descp": "Chapter 2, Verse 47"},
+            ai_why=(
                 "Modern psychology calls this 'process focus' versus 'outcome focus'. "
                 "Research (Dweck, 2006) shows that process-focused individuals exhibit "
                 "higher resilience and sustained motivation compared to those fixated on results."
             ),
-            tags={"anxious": 0.9, "stress": 0.85, "focus": 0.7, "lost": 0.6, "worry": 0.8},
             sanskrit_text="कर्मण्येवाधिकारस्ते मा फलेषु कदाचन। मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥",
             transliteration=(
                 "Karmanye vadhikaraste Ma Phaleshu Kadachana, "
@@ -86,15 +85,13 @@ def _gita_verses() -> list[GitaVerse]:
             duration_mins=5,
             chapter=10,
             verse_number=20,
-            short_descp="Chapter 10, Verse 20",
-            location="anywhere",
-            why=(
+            context={"location": "anywhere", "short_descp": "Chapter 10, Verse 20"},
+            ai_why=(
                 "Neuroscience shows that feelings of isolation trigger the same brain regions "
                 "as physical pain (Eisenberger, 2012). This verse reframes aloneness — "
                 "the divine is seated in every heart, which aligns with modern attachment "
                 "theory: a sense of 'secure base' reduces cortisol and anxiety."
             ),
-            tags={"sad": 0.9, "low": 0.85, "lonely": 0.8, "hopeless": 0.75, "empty": 0.7},
             sanskrit_text="अहमात्मा गुडाकेश सर्वभूताशयस्थितः। अहमादिश्च मध्यं च भूतानामन्त एव च॥",
             transliteration=(
                 "Aham atma gudakesha sarva-bhutashaya-sthitah, "
@@ -121,16 +118,14 @@ def _gita_verses() -> list[GitaVerse]:
             duration_mins=5,
             chapter=6,
             verse_number=35,
-            short_descp="Chapter 6, Verse 35",
-            location="anywhere",
-            why=(
+            context={"location": "anywhere", "short_descp": "Chapter 6, Verse 35"},
+            ai_why=(
                 "The Gita acknowledges the mind's restless nature 5,000 years before "
                 "neuroscience confirmed it. Default Mode Network (DMN) research shows "
                 "the untrained mind wanders ~47% of waking hours (Killingsworth & Gilbert, 2010). "
                 "Abhyasa (practice) and vairagya (detachment) are the prescribed antidotes — "
                 "mirroring modern mindfulness-based stress reduction (MBSR)."
             ),
-            tags={"scattered": 0.92, "restless": 0.9, "distracted": 0.85, "unfocused": 0.8, "anxious": 0.6},
             sanskrit_text="असंशयं महाबाहो मनो दुर्निग्रहं चलम्। अभ्यासेन तु कौन्तेय वैराग्येण च गृह्यते॥",
             transliteration=(
                 "Asanshayam maha-baho mano durnigraham chalam, "
@@ -158,15 +153,13 @@ def _gita_verses() -> list[GitaVerse]:
             duration_mins=5,
             chapter=12,
             verse_number=13,
-            short_descp="Chapter 12, Verse 13",
-            location="anywhere",
-            why=(
+            context={"location": "anywhere", "short_descp": "Chapter 12, Verse 13"},
+            ai_why=(
                 "Gratitude practice rewires the brain's reward system. Studies (Emmons & McCullough, 2003) "
                 "show gratitude journaling increases well-being by 25%. This verse describes the "
                 "ideal devotee as one free from hatred and full of compassion — qualities that "
                 "positive psychology identifies as key predictors of sustained happiness."
             ),
-            tags={"grateful": 0.9, "happy": 0.85, "peaceful": 0.8, "joyful": 0.75, "thankful": 0.7},
             sanskrit_text="अद्वेष्टा सर्वभूतानां मैत्रः करुण एव च। निर्ममो निरहङ्कारः समदुःखसुखः क्षमी॥",
             transliteration=(
                 "Adveshta sarva-bhutanam maitrah karuna eva cha, "
@@ -193,16 +186,14 @@ def _gita_verses() -> list[GitaVerse]:
             duration_mins=5,
             chapter=3,
             verse_number=8,
-            short_descp="Chapter 3, Verse 8",
-            location="anywhere",
-            why=(
+            context={"location": "anywhere", "short_descp": "Chapter 3, Verse 8"},
+            ai_why=(
                 "When exhausted, the mind gravitates toward inaction. But behavioural activation "
                 "therapy (Jacobson et al., 2001) shows that small purposeful actions — even when "
                 "fatigued — break the lethargy cycle by stimulating dopaminergic reward pathways. "
                 "Krishna's instruction to perform one's duty mirrors this: act, even minimally, "
                 "because inaction deepens the fatigue spiral."
             ),
-            tags={"tired": 0.9, "exhausted": 0.85, "drained": 0.8, "fatigued": 0.75, "low": 0.6},
             sanskrit_text="नियतं कुरु कर्म त्वं कर्म ज्यायो ह्यकर्मणः। शरीरयात्रापि च ते न प्रसिद्ध्येदकर्मणः॥",
             transliteration=(
                 "Niyatam kuru karma tvam karma jyayo hyakarmanah, "
@@ -233,20 +224,18 @@ def _punya_activities() -> list[Punya]:
             emoji="🌻",
             subtitle="A small act of kindness",
             duration_mins=5,
-            location="anywhere",
-            short_descp="Pay for a stranger's tea or donate a small amount via UPI",
+            context={"location": "anywhere", "short_descp": "Pay for a stranger's tea or donate a small amount via UPI"},
             activity=(
                 "Next time you're at a tea stall or cafe, pay for the person behind you. "
                 "If you're working from home, transfer ₹20 to a local street vendor via UPI."
             ),
-            why=(
+            ai_why=(
                 "Prosocial spending — spending money on others rather than yourself — "
                 "activates the nucleus accumbens (reward centre) more strongly than "
                 "self-directed spending (Dunn et al., 2008, Science). "
                 "Even a small act triggers an oxytocin release cycle, improving your "
                 "own mood for up to 2 hours post-action."
             ),
-            tags={"sad": 0.9, "low": 0.85, "grateful": 0.8, "angry": 0.6, "lonely": 0.7},
             icon_url="",
         ),
         Punya(
@@ -254,21 +243,19 @@ def _punya_activities() -> list[Punya]:
             emoji="💛",
             subtitle="Express genuine appreciation",
             duration_mins=10,
-            location="anywhere",
-            short_descp="Write a heartfelt thank-you message to someone who helped you",
+            context={"location": "anywhere", "short_descp": "Write a heartfelt thank-you message to someone who helped you"},
             activity=(
                 "Think of someone who made a difference in your life recently — "
                 "a colleague, friend, parent, or even a delivery person. "
                 "Write them a genuine 3-4 line message of thanks and send it now."
             ),
-            why=(
+            ai_why=(
                 "Gratitude expression activates the medial prefrontal cortex and "
                 "produces lasting neural changes. A landmark study (Seligman et al., 2005) "
                 "found that writing and delivering a gratitude letter produced the single "
                 "largest positive psychology intervention effect, with mood benefits "
                 "lasting up to one month."
             ),
-            tags={"low": 0.85, "grateful": 0.9, "tired": 0.7, "sad": 0.75, "lonely": 0.8},
             icon_url="",
         ),
         Punya(
@@ -276,20 +263,18 @@ def _punya_activities() -> list[Punya]:
             emoji="🐾",
             subtitle="Nourish a fellow being",
             duration_mins=10,
-            location="anywhere",
-            short_descp="Buy biscuits or grain and feed stray dogs, cats, or birds near you",
+            context={"location": "anywhere", "short_descp": "Buy biscuits or grain and feed stray dogs, cats, or birds near you"},
             activity=(
                 "Pick up a packet of biscuits or a handful of grain. Step outside "
                 "and feed the stray dogs, cats, or birds in your area. "
                 "Sit quietly for a moment and watch them eat."
             ),
-            why=(
+            ai_why=(
                 "Human-animal interaction triggers oxytocin release in both the human "
                 "and the animal (Handlin et al., 2011). The act of nurturing activates "
                 "the caregiving neural circuit (ventral tegmental area → nucleus accumbens), "
                 "producing a potent anti-anxiety effect comparable to low-dose SSRIs."
             ),
-            tags={"anxious": 0.85, "lonely": 0.9, "sad": 0.8, "low": 0.75, "stressed": 0.7},
             icon_url="",
         ),
         Punya(
@@ -297,20 +282,18 @@ def _punya_activities() -> list[Punya]:
             emoji="🙏",
             subtitle="Lend a hand to someone nearby",
             duration_mins=15,
-            location="home",
-            short_descp="Help an elderly neighbour carry groceries or assist with a small task",
+            context={"location": "home", "short_descp": "Help an elderly neighbour carry groceries or assist with a small task"},
             activity=(
                 "Check on an elderly neighbour today. Offer to carry their groceries, "
                 "help with a household task, or simply sit with them for 10 minutes "
                 "and listen to a story from their life."
             ),
-            why=(
+            ai_why=(
                 "Intergenerational social contact reduces loneliness biomarkers in both "
                 "parties. The 'tend-and-befriend' response (Taylor et al., 2000) shows "
                 "that caregiving behaviour suppresses cortisol and activates the "
                 "parasympathetic nervous system, reducing stress at a physiological level."
             ),
-            tags={"scattered": 0.7, "restless": 0.75, "tired": 0.8, "lonely": 0.85, "low": 0.7},
             icon_url="",
         ),
         Punya(
@@ -318,20 +301,18 @@ def _punya_activities() -> list[Punya]:
             emoji="🌿",
             subtitle="Nurture greenery around you",
             duration_mins=15,
-            location="anywhere",
-            short_descp="Plant a sapling, water your garden, or gift a small plant to someone",
+            context={"location": "anywhere", "short_descp": "Plant a sapling, water your garden, or gift a small plant to someone"},
             activity=(
                 "Plant a sapling in your garden, balcony, or a public space. "
                 "If planting isn't possible today, water your existing plants mindfully — "
                 "notice the soil, the leaves, the quiet act of nurturing life."
             ),
-            why=(
+            ai_why=(
                 "Horticultural therapy research (Soga et al., 2017) demonstrates that "
                 "gardening reduces cortisol levels by 11.4% more than indoor relaxation. "
                 "Contact with soil microbiome (Mycobacterium vaccae) stimulates serotonin "
                 "production, a natural antidepressant pathway discovered by Lowry et al. (2007)."
             ),
-            tags={"anxious": 0.8, "stressed": 0.85, "curious": 0.7, "scattered": 0.65, "grateful": 0.6},
             icon_url="",
         ),
     ]
@@ -346,93 +327,149 @@ def _breathing_exercises() -> list[Breathing]:
             emoji="🧘",
             subtitle="Balance your hemispheres",
             duration_mins=5,
-            location="anywhere",
-            short_descp="Alternate nostril breathing to balance brain hemispheres and reduce anxiety",
-            why=(
+            context={
+                "location": "anywhere",
+                "short_descp": "Alternate nostril breathing to balance brain hemispheres and reduce anxiety",
+            },
+            ai_why=(
                 "Alternating nostril breathing balances activity between the left "
                 "(parasympathetic) and right (sympathetic) hemispheres of the brain. "
                 "EEG studies (Telles et al., 1994) demonstrate increased alpha-wave "
                 "activity and subjective calmness within 5 minutes of practice. "
                 "The technique also increases blood oxygen saturation by ~2-3%."
             ),
-            tags={"anxious": 0.92, "stress": 0.88, "angry": 0.75, "lost": 0.6, "scattered": 0.7},
             audio_url="",
             icon_url="",
             duration_seconds=300,
-            pattern="4-0-4-0",
-            animation=1,
+            animation="pulse",
+            breath_phases=[
+                BreathPhase(name="INHALE", seconds=4, instruction="Breathe in through your left nostril"),
+                BreathPhase(name="EXHALE", seconds=4, instruction="Breathe out through your right nostril"),
+            ],
+            cycles=10,
+            steps=[
+                "Sit comfortably with your spine straight.",
+                "Close your right nostril with your right thumb.",
+                "Inhale slowly through your left nostril for 4 counts.",
+                "Close your left nostril with your ring finger, release your thumb.",
+                "Exhale through your right nostril for 4 counts.",
+                "Inhale through your right nostril, then switch. Repeat for 10 cycles.",
+            ],
         ),
         Breathing(
             title="Sama Vritti — Box Breathing",
             emoji="🌊",
             subtitle="Equal-ratio calm",
             duration_mins=4,
-            location="anywhere",
-            short_descp="Box breathing (4-4-4-4) used by Navy SEALs for instant calm under pressure",
-            why=(
+            context={
+                "location": "anywhere",
+                "short_descp": "Box breathing (4-4-4-4) used by Navy SEALs for instant calm under pressure",
+            },
+            ai_why=(
                 "Box breathing synchronises the heart rate with the breath cycle, "
                 "maximising heart rate variability (HRV). Used by U.S. Navy SEALs "
                 "for high-stress performance, peer-reviewed trials (Ma et al., 2017) "
                 "show a 15% reduction in self-reported anxiety after just 5 minutes. "
                 "The equal-ratio pattern activates the vagus nerve bilaterally."
             ),
-            tags={"anxious": 0.9, "stress": 0.9, "scattered": 0.8, "restless": 0.75, "nervous": 0.85},
             audio_url="",
             icon_url="",
             duration_seconds=240,
-            pattern="4-4-4-4",
-            animation=2,
+            animation="hold-pulse",
+            breath_phases=[
+                BreathPhase(name="INHALE", seconds=4, instruction="Breathe in slowly through your nose"),
+                BreathPhase(name="HOLD", seconds=4, instruction="Hold gently — no strain"),
+                BreathPhase(name="EXHALE", seconds=4, instruction="Slow release through your mouth"),
+                BreathPhase(name="HOLD", seconds=4, instruction="Pause before the next inhale"),
+            ],
+            cycles=4,
+            steps=[
+                "Sit upright in a comfortable position.",
+                "Exhale all the air from your lungs.",
+                "Inhale through your nose for exactly 4 counts.",
+                "Hold your breath for 4 counts.",
+                "Exhale slowly for 4 counts.",
+                "Hold empty for 4 counts. Repeat 4 cycles.",
+            ],
         ),
         Breathing(
             title="4-7-8 Relaxation Breath",
             emoji="🌸",
             subtitle="Dr Weil's sleep technique",
             duration_mins=3,
-            location="anywhere",
-            short_descp="4-7-8 breathing pattern for deep relaxation and sleep preparation",
-            why=(
+            context={
+                "location": "anywhere",
+                "short_descp": "4-7-8 breathing pattern for deep relaxation and sleep preparation",
+            },
+            ai_why=(
                 "Popularised by Dr Andrew Weil and rooted in Pranayama, the extended "
                 "exhale (twice the inhale length) stimulates the parasympathetic nervous "
                 "system. The prolonged breath-hold increases alveolar CO₂, which dilates "
                 "blood vessels and promotes muscular relaxation. Clinical trials show "
                 "improved sleep onset latency by up to 20 minutes (Jerath et al., 2015)."
             ),
-            tags={"tired": 0.9, "exhausted": 0.85, "anxious": 0.8, "stress": 0.75, "restless": 0.7},
             audio_url="",
             icon_url="",
             duration_seconds=180,
-            pattern="4-7-8-0",
-            animation=3,
+            animation="asymmetric",
+            breath_phases=[
+                BreathPhase(name="INHALE", seconds=4, instruction="Breathe in through your nose"),
+                BreathPhase(name="HOLD", seconds=7, instruction="Hold gently — no strain"),
+                BreathPhase(name="EXHALE", seconds=8, instruction="Slow release through mouth — whooshing sound"),
+            ],
+            cycles=4,
+            steps=[
+                "Place the tip of your tongue against the ridge behind your upper front teeth.",
+                "Exhale completely through your mouth with a whooshing sound.",
+                "Close your mouth. Inhale through your nose for exactly 4 counts.",
+                "Hold your breath for exactly 7 counts.",
+                "Exhale completely through your mouth, making a whoosh sound, for exactly 8 counts. Repeat 4 cycles.",
+            ],
         ),
         Breathing(
             title="Bhramari — Humming Bee Breath",
             emoji="🐝",
             subtitle="Vibration-based calm",
             duration_mins=5,
-            location="anywhere",
-            short_descp="Humming exhalation that calms the mind through cranial vibration",
-            why=(
+            context={
+                "location": "anywhere",
+                "short_descp": "Humming exhalation that calms the mind through cranial vibration",
+            },
+            ai_why=(
                 "The humming exhalation in Bhramari creates vibrations at ~130 Hz in "
                 "the cranial cavity, stimulating the vagus nerve and increasing nitric "
                 "oxide production in the paranasal sinuses by up to 15-fold (Weitzberg & "
                 "Lundberg, 2002). fMRI studies show reduced amygdala activity within "
                 "3 minutes of practice, mirroring effects of anti-anxiety medication."
             ),
-            tags={"anxious": 0.88, "angry": 0.85, "stressed": 0.8, "scattered": 0.75, "sad": 0.65},
             audio_url="",
             icon_url="",
             duration_seconds=300,
-            pattern="4-0-6-0",
-            animation=4,
+            animation="vibrate",
+            breath_phases=[
+                BreathPhase(name="INHALE", seconds=4, instruction="Breathe in deeply through your nose"),
+                BreathPhase(name="EXHALE", seconds=6, instruction="Exhale with a steady humming sound"),
+            ],
+            cycles=7,
+            steps=[
+                "Sit comfortably and close your eyes.",
+                "Place your index fingers gently on the tragus cartilage of each ear.",
+                "Inhale deeply through your nose for 4 counts.",
+                "While exhaling, make a steady humming sound like a bee for 6 counts.",
+                "Feel the vibrations in your forehead and jaw.",
+                "Repeat for 7 cycles, keeping the humming pitch steady.",
+            ],
         ),
         Breathing(
             title="Kapalabhati — Skull Shining Breath",
             emoji="✨",
             subtitle="Energising cleanse",
             duration_mins=3,
-            location="anywhere",
-            short_descp="Rapid rhythmic exhalations to boost energy and clear mental fog",
-            why=(
+            context={
+                "location": "anywhere",
+                "short_descp": "Rapid rhythmic exhalations to boost energy and clear mental fog",
+            },
+            ai_why=(
                 "Kapalabhati's rapid diaphragmatic contractions increase blood oxygen "
                 "saturation and stimulate the sympathetic nervous system briefly, "
                 "followed by a parasympathetic rebound. Studies (Stancak et al., 1991) "
@@ -440,12 +477,23 @@ def _breathing_exercises() -> list[Breathing]:
                 "enhanced alpha-wave activity (calm) immediately after — a unique "
                 "'alert-yet-calm' state ideal for clearing mental fog."
             ),
-            tags={"tired": 0.9, "low": 0.8, "foggy": 0.85, "drained": 0.75, "curious": 0.6},
             audio_url="",
             icon_url="",
             duration_seconds=180,
-            pattern="1-0-1-0",
-            animation=5,
+            animation="rapid",
+            breath_phases=[
+                BreathPhase(name="EXHALE", seconds=1, instruction="Sharp forceful exhale through your nose"),
+                BreathPhase(name="INHALE", seconds=1, instruction="Allow passive inhale — belly relaxes naturally"),
+            ],
+            cycles=30,
+            steps=[
+                "Sit tall with hands on your knees.",
+                "Take a deep breath in to prepare.",
+                "Forcefully exhale through your nose by contracting your lower belly sharply.",
+                "Allow the inhale to happen passively as your belly relaxes.",
+                "Start slowly (1 per second), then build speed to 2 per second.",
+                "Complete 30 rapid cycles, then rest with 3 deep breaths. Repeat the set.",
+            ],
         ),
     ]
 

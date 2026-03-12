@@ -30,6 +30,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.models.ingredients import (
     BaseIngredient,
+    BreathPhase,
     Breathing,
     Chanting,
     GitaVerse,
@@ -53,12 +54,11 @@ def _gita_verse() -> GitaVerse:
         duration_mins=5,
         chapter=2,
         verse_number=47,
-        why=(
+        ai_why=(
             "Modern psychology calls this 'process focus' versus 'outcome focus'. "
             "Research (Dweck, 2006) shows that process-focused individuals exhibit "
             "higher resilience and sustained motivation compared to those fixated on results."
         ),
-        tags={"anxious": 0.9, "lost": 0.85, "stress": 0.8, "focus": 0.7},
         icon_url="",
         sanskrit_text="कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।",
         transliteration="Karmanye vadhikaraste Ma Phaleshu Kadachana",
@@ -80,13 +80,12 @@ def _gita_verse() -> GitaVerse:
 def _yoga() -> Yoga:
     return Yoga(
         title="Balasana — Child's Pose",
-        why=(
+        ai_why=(
             "Balasana activates the parasympathetic nervous system by stimulating "
             "the vagus nerve through mild thoracic compression.  Studies show a "
             "measurable drop in cortisol within 90 seconds of holding the pose "
             "(Streeter et al., 2012, Journal of Alternative and Complementary Medicine)."
         ),
-        tags={"anxious": 0.95, "stress": 0.9, "angry": 0.7, "tired": 0.6},
         icon_url="",
         gif_url="",
         steps=[
@@ -110,34 +109,46 @@ def _breathing() -> Breathing:
         emoji="🧘",
         subtitle="Balance your hemispheres",
         duration_mins=5,
-        location="anywhere",
-        short_descp="Alternate nostril breathing to balance brain hemispheres and reduce anxiety",
-        why=(
+        context={
+            "location": "anywhere",
+            "short_descp": "Alternate nostril breathing to balance brain hemispheres and reduce anxiety",
+        },
+        ai_why=(
             "Alternating nostril breathing balances activity between the left "
             "(parasympathetic) and right (sympathetic) hemispheres of the brain.  "
             "EEG studies (Telles et al., 1994) demonstrate increased alpha-wave "
             "activity and subjective calmness within 5 minutes of practice.  "
-            "The technique also increases blood oxygen saturation by ~2–3%."
+            "The technique also increases blood oxygen saturation by ~2\u20133%."
         ),
-        tags={"anxious": 0.92, "stress": 0.88, "angry": 0.75, "lost": 0.6},
         icon_url="",
         audio_url="",
         duration_seconds=300,
-        pattern="4-0-4-0",
-        animation=1,
+        animation="pulse",
+        breath_phases=[
+            BreathPhase(name="INHALE", seconds=4, instruction="Breathe in through your left nostril"),
+            BreathPhase(name="EXHALE", seconds=4, instruction="Breathe out through your right nostril"),
+        ],
+        cycles=10,
+        steps=[
+            "Sit comfortably with your spine straight.",
+            "Close your right nostril with your right thumb.",
+            "Inhale slowly through your left nostril for 4 counts.",
+            "Close your left nostril with your ring finger, release your thumb.",
+            "Exhale through your right nostril for 4 counts.",
+            "Inhale through your right nostril, then switch. Repeat for 10 cycles.",
+        ],
     )
 
 
 def _chanting() -> Chanting:
     return Chanting(
         title="Om Chanting — The Primordial Sound",
-        why=(
+        ai_why=(
             "The syllable 'Om' (AUM) chanted at ~136.1 Hz creates standing resonance "
             "in the cranial vault.  fMRI studies (Kalyani et al., 2011) show deactivation "
-            "of the limbic system (fear/anger centre) during Om chanting — a response "
+            "of the limbic system (fear/anger centre) during Om chanting \u2014 a response "
             "similar to that of anti-anxiety medication, but drug-free."
         ),
-        tags={"anxious": 0.88, "peaceful": 0.95, "curious": 0.6, "grateful": 0.7},
         icon_url="",
         audio_url="",
         mantra_text="ॐ (Om / AUM)",
@@ -151,20 +162,21 @@ def _punya() -> Punya:
         emoji="🌻",
         subtitle="A small act of kindness",
         duration_mins=5,
-        location="anywhere",
-        short_descp="Pay for a stranger's tea or donate a small amount via UPI",
+        context={
+            "location": "anywhere",
+            "short_descp": "Pay for a stranger's tea or donate a small amount via UPI",
+        },
         activity=(
             "Next time you're at a tea stall or cafe, pay for the person behind you. "
             "If you're working from home, transfer ₹20 to a local street vendor via UPI."
         ),
-        why=(
-            "Prosocial spending — spending money on others rather than yourself — "
+        ai_why=(
+            "Prosocial spending \u2014 spending money on others rather than yourself \u2014 "
             "activates the nucleus accumbens (reward centre) more strongly than "
             "self-directed spending (Dunn et al., 2008, Science).  "
             "Even a small act triggers an oxytocin release cycle, improving your "
             "own mood for up to 2 hours post-action."
         ),
-        tags={"sad": 0.9, "lost": 0.8, "grateful": 0.85, "angry": 0.6},
         icon_url="",
     )
 
@@ -172,14 +184,13 @@ def _punya() -> Punya:
 def _story() -> Story:
     return Story(
         title="The Churning of the Ocean — The First Collaboration",
-        why=(
+        ai_why=(
             "The Samudra Manthan allegory (c. 1500 BCE, Vishnu Purana) describes "
             "opposing forces (gods and demons) cooperating to extract value from chaos.  "
             "Modern organisational psychology echoes this: diverse, even adversarial, "
             "teams consistently outperform homogeneous ones on complex problems "
             "(Page, 2007, 'The Difference')."
         ),
-        tags={"lost": 0.85, "curious": 0.9, "angry": 0.7, "anxious": 0.65},
         icon_url="",
         story_text=(
             "Long ago, the gods (Devas) were losing their power.  Vishnu advised them "

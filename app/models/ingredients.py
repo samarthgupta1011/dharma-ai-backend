@@ -15,15 +15,15 @@ Architecture:
       2. A queryable field for filtering (e.g., stories shuffle endpoint).
       3. A Pydantic discriminator for OpenAPI schema generation.
 
-  • Common optional fields (emoji, subtitle, duration_mins, location,
-    short_descp) live on BaseIngredient so every subclass inherits them.
+  • Common optional fields (emoji, subtitle, duration_mins, context)
+    live on BaseIngredient so every subclass inherits them.
     These are DB-stored and used for display + passing context to the AI.
 
-  • The `tags` field is a Dict[str, float] mapping semantic keywords to
-    relevance scores. The AI engine uses these scores when matching
-    ingredients to a user's mood (e.g., {"anxiety": 0.9, "stress": 0.8}).
+  • The `context` field is a Dict[str, str] holding key-value metadata
+    such as location (work/home/anywhere), time_of_day (day/night),
+    and short_descp (brief AI context string).
 
-  • The `why` field is the heart of Dharma AI's UX: a concise explanation
+  • The `ai_why` field is the heart of Dharma AI's UX: a concise explanation
     grounding the practice in science or history rather than pure faith.
 """
 
@@ -75,6 +75,13 @@ class ReflectionQuestion(BaseModel):
     question: str = Field(..., description="Open-ended self-reflection question.")
 
 
+class BreathPhase(BaseModel):
+    """A single phase in a breathing cycle (e.g. INHALE for 4 seconds)."""
+    name: str = Field(..., description="Phase name: INHALE, HOLD, EXHALE.")
+    seconds: int = Field(..., description="Duration of this phase in seconds.")
+    instruction: str = Field(default="", description="User-facing guidance for this phase.")
+
+
 # ── Base (collection root) ────────────────────────────────────────────────────
 
 class BaseIngredient(Document):
@@ -100,36 +107,25 @@ class BaseIngredient(Document):
         default="",
         description="Secondary display text shown below the title.",
     )
-    why: str = Field(
-        ...,
+    ai_why: Optional[str] = Field(
+        default="",
         description=(
             "The scientific or historical rationale for this practice. "
-            "This is the core of Dharma AI's skeptic-friendly approach."
+            "This is the core of Dharma AI's skeptic-friendly approach. "
+            "AI-generated at response time for personalised context."
         ),
     )
     duration_mins: Optional[int] = Field(
         default=None,
         description="Read or practice duration in minutes.",
     )
-    location: Optional[str] = Field(
-        default=None,
-        description="Where this activity can be performed: 'work', 'home', or 'anywhere'.",
-    )
-    short_descp: str = Field(
-        default="",
-        description=(
-            "Brief context string passed to the AI when listing available "
-            "activities for selection. Keep it concise (~15 words)."
-        ),
-    )
-
-    # ── AI matching metadata ──────────────────────────────────────────────────
-    tags: Dict[str, float] = Field(
+    context: Dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "Semantic keyword → relevance score mapping used by the AI engine "
-            "to match ingredients to a user's mood. "
-            "Example: {'anxiety': 0.9, 'stress': 0.85, 'focus': 0.3}"
+            "Key-value context pairs for this activity. "
+            "Standard keys: 'location', 'time_of_day', 'short_descp'. "
+            "Example: {'location': 'work', 'time_of_day': 'day', "
+            "'short_descp': 'Alternate nostril breathing to reduce anxiety'}"
         ),
     )
 
@@ -256,7 +252,7 @@ class Breathing(BaseIngredient):
     and reducing cortisol.  Studies (Zaccaro et al., 2018) show
     measurable reductions in anxiety within minutes.
 
-    DB-stored: audio_url, duration_seconds, pattern, animation.
+    DB-stored: audio_url, duration_seconds, animation, breath_phases, cycles, steps.
     AI-generated at runtime: ai_why, ai_impact (1-3 pointers).
     """
 
@@ -270,29 +266,30 @@ class Breathing(BaseIngredient):
         default=0,
         description="Recommended total practice duration in seconds.",
     )
-    pattern: str = Field(
+    animation: str = Field(
         default="",
         description=(
-            "Inhale-Hold-Exhale-Hold counts.  Example: '4-7-8' means "
-            "inhale 4 counts, hold 7, exhale 8."
+            "Frontend animation style. "
+            "Values: hold-pulse, vibrate, asymmetric, pulse, rapid."
         ),
     )
-    animation: Optional[int] = Field(
-        default=None,
+    breath_phases: List[BreathPhase] = Field(
+        default_factory=list,
         description=(
-            "Frontend animation enum number. The frontend renders the "
-            "corresponding breathing animation based on this value."
+            "Ordered list of phases in one breathing cycle. "
+            "Each phase has a name, duration in seconds, and instruction."
         ),
+    )
+    cycles: int = Field(
+        default=0,
+        description="Number of times to repeat the breath_phases cycle.",
+    )
+    steps: List[str] = Field(
+        default_factory=list,
+        description="Step-by-step textual instructions for the technique.",
     )
 
     # ── AI-generated fields (set at response time, not stored in DB) ──────────
-    ai_why: Optional[str] = Field(
-        default=None,
-        description=(
-            "AI-generated explanation (~20-25 words) of why this breathing "
-            "exercise helps, grounded in biology, neuroscience, and Vedic evidence."
-        ),
-    )
     ai_impact: Optional[List[ImpactPointer]] = Field(
         default=None,
         description=(
@@ -336,7 +333,7 @@ class Punya(BaseIngredient):
     studies (Post, 2005).  This grounds the ancient concept of Dharma
     in measurable well-being outcomes.
 
-    DB-stored: activity (what to do), location, short_descp.
+    DB-stored: activity (what to do), context.
     AI-generated at runtime: ai_why, ai_impact (1-3 pointers).
     """
 
@@ -348,13 +345,6 @@ class Punya(BaseIngredient):
     )
 
     # ── AI-generated fields (set at response time, not stored in DB) ──────────
-    ai_why: Optional[str] = Field(
-        default=None,
-        description=(
-            "AI-generated explanation (~20-25 words) of why this activity helps, "
-            "grounded in biology, neuroscience, brain-wiring and Vedic evidence."
-        ),
-    )
     ai_impact: Optional[List[ImpactPointer]] = Field(
         default=None,
         description=(

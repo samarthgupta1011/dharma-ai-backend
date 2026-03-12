@@ -94,7 +94,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 description="Short, memorable title for the verse",
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Scientific/Historical Context",
                 required=True,
@@ -140,14 +140,6 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 label="Icon",
                 required=False,
             ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
-                required=False,
-                placeholder='{"anxiety": 0.9, "stress": 0.8}',
-                description="Semantic keyword → relevance score mapping",
-            ),
         ],
         media_fields=["audio_url", "icon_url"],
     ),
@@ -163,7 +155,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 placeholder="Downward Dog",
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Scientific Basis",
                 required=True,
@@ -197,12 +189,6 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 label="Icon",
                 required=False,
             ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
-                required=False,
-            ),
         ],
         media_fields=["gif_url", "icon_url"],
     ),
@@ -218,7 +204,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 placeholder="4-7-8 Breathing",
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Scientific Basis",
                 required=True,
@@ -238,22 +224,39 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 required=False,
             ),
             FieldSpec(
-                name="pattern",
+                name="animation",
                 type="string",
-                label="Breath Pattern",
+                label="Animation Style",
                 required=False,
-                placeholder="4-7-8",
+                placeholder="hold-pulse",
+                description="One of: hold-pulse, vibrate, asymmetric, pulse, rapid",
+            ),
+            FieldSpec(
+                name="breath_phases",
+                type="json",
+                label="Breath Phases (JSON Array)",
+                required=False,
+                placeholder='[{"name": "INHALE", "seconds": 4, "instruction": "Breathe in"}]',
+                description="Ordered phases per cycle with name, seconds, instruction",
+            ),
+            FieldSpec(
+                name="cycles",
+                type="integer",
+                label="Number of Cycles",
+                required=False,
+            ),
+            FieldSpec(
+                name="steps",
+                type="json",
+                label="Steps (JSON Array)",
+                required=False,
+                placeholder='["Step 1", "Step 2"]',
+                description="Step-by-step textual instructions",
             ),
             FieldSpec(
                 name="icon_url",
                 type="file",
                 label="Icon",
-                required=False,
-            ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
                 required=False,
             ),
         ],
@@ -270,7 +273,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 required=True,
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Scientific Basis",
                 required=True,
@@ -301,12 +304,6 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 label="Icon",
                 required=False,
             ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
-                required=False,
-            ),
         ],
         media_fields=["audio_url", "icon_url"],
     ),
@@ -321,7 +318,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 required=True,
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Why It Matters",
                 required=True,
@@ -355,29 +352,17 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 required=False,
             ),
             FieldSpec(
-                name="location",
-                type="string",
-                label="Location (work / home / anywhere)",
+                name="context",
+                type="json",
+                label="Context (JSON)",
                 required=False,
-                placeholder="anywhere",
-            ),
-            FieldSpec(
-                name="short_descp",
-                type="text",
-                label="Short Description (AI context)",
-                required=False,
-                description="Brief context passed to AI when listing activities (~15 words)",
+                placeholder='{"location": "anywhere", "short_descp": "Brief AI description"}',
+                description="Key-value context pairs: location, time_of_day, short_descp",
             ),
             FieldSpec(
                 name="icon_url",
                 type="file",
                 label="Icon",
-                required=False,
-            ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
                 required=False,
             ),
         ],
@@ -394,7 +379,7 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 required=True,
             ),
             FieldSpec(
-                name="why",
+                name="ai_why",
                 type="text",
                 label="Modern Relevance",
                 required=True,
@@ -423,12 +408,6 @@ FORM_SCHEMAS: Dict[str, ActivityTypeOptionspecs] = {
                 name="icon_url",
                 type="file",
                 label="Icon",
-                required=False,
-            ),
-            FieldSpec(
-                name="tags",
-                type="json",
-                label="Tags (JSON)",
                 required=False,
             ),
         ],
@@ -504,10 +483,6 @@ async def create_ingredient(
 
     # Add auto-populated fields
     data["created_at"] = datetime.now(timezone.utc)
-
-    # If tags not provided, default to empty dict
-    if "tags" not in data:
-        data["tags"] = {}
 
     # Get the correct Beanie model class and instantiate it
     model_class = TYPE_TO_MODEL[activity_type]

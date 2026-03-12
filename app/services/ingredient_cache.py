@@ -4,7 +4,7 @@ app/services/ingredient_cache.py
 Lightweight in-memory cache for ingredient context data.
 
 Only stores the fields needed to build AI context strings
-(id, short_descp, location).  Full documents are fetched by ID
+(id, context).  Full documents are fetched by ID
 from the database only after the AI selects a specific item.
 
 Features:
@@ -28,13 +28,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_TTL_SECONDS = 300  # 5 minutes
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class CachedIngredient:
     """Minimal projection of an ingredient stored in the cache."""
 
     id: PydanticObjectId
-    short_descp: str
-    location: Optional[str]
+    context: Dict[str, str]
 
 
 # Mapping from cache keys to the Beanie model used for DB queries.
@@ -118,8 +117,7 @@ class IngredientCache:
         items = [
             CachedIngredient(
                 id=doc.id,
-                short_descp=doc.short_descp or "",
-                location=doc.location,
+                context=doc.context or {},
             )
             for doc in docs
         ]

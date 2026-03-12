@@ -45,7 +45,6 @@ from app.models.user import User
 from app.services.ingredient_cache import CachedIngredient, get_ingredient_cache
 from app.services.openai_service import BaseOpenAIService, get_openai_service
 from app.services.storage_service import get_storage_service
-from app.prompts.dharma_prompts import RECIPE_PROMPT_TEMPLATE
 
 router = APIRouter(prefix="/recipe", tags=["Recipe"])
 
@@ -58,7 +57,7 @@ def _build_activity_context(
     """
     Build a numbered context string and mapping for AI activity selection.
 
-    Uses lightweight CachedIngredient projections (id, short_descp, location)
+    Uses lightweight CachedIngredient projections (id, context)
     rather than full DB documents.
     Returns (context_string, {number: cached_item}).
     """
@@ -68,8 +67,10 @@ def _build_activity_context(
     lines: list[str] = []
     mapping: Dict[int, CachedIngredient] = {}
     for idx, activity in enumerate(activities, start=1):
-        loc = f" [{activity.location}]" if activity.location else ""
-        lines.append(f"{idx}.{loc} {activity.short_descp}")
+        ctx_parts = [f"{k}={v}" for k, v in activity.context.items() if k != "short_descp"] if activity.context else []
+        ctx = f" [{', '.join(ctx_parts)}]" if ctx_parts else ""
+        short_descp = activity.context.get("short_descp", "")
+        lines.append(f"{idx}.{ctx} {short_descp}")
         mapping[idx] = activity
     return "\n".join(lines), mapping
 
@@ -125,15 +126,7 @@ async def get_recipe(
     punya_context, punya_map = _build_activity_context(punya_cached)
     breathing_context, breathing_map = _build_activity_context(breathing_cached)
 
-    # ── 2. Build user prompt & call AI service ────────────────────────────────
-    feelings_line = f'The user adds: "{feelings}"' if feelings else ""
-    user_prompt = RECIPE_PROMPT_TEMPLATE.format(
-        mood=mood,
-        feelings_line=feelings_line,
-        gita_context=gita_context or "(No Gita verses available in database yet.)",
-        punya_context=punya_context or "(No punya activities available in database yet.)",
-        breathing_context=breathing_context or "(No breathing exercises available in database yet.)",
-    )
+    # ── 2. Call AI service ────────────────────────────────────────────────
 
     try:
         ai_recipe = await openai_service.generate_dharma_recipe(
@@ -156,7 +149,7 @@ async def get_recipe(
         user_id=str(current_user.id),
         mood=mood,
         feelings=feelings,
-        prompt=user_prompt,
+
     ).insert()
 
     # ── 3. Process GITA ──────────────────────────────────────────────────────
@@ -183,7 +176,7 @@ async def get_recipe(
             "title": "Bhagavad Gita",
             "emoji": "🕉️",
             "subtitle": "Full verse details coming soon",
-            "why": "This verse was selected by AI as relevant to your current mood.",
+            "ai_why": "This verse was selected by AI as relevant to your current mood.",
             "chapter": None,
             "verse_number": None,
             "deeper_insights_title": gita_ai.get("deeper_insights_title"),
@@ -219,7 +212,6 @@ async def get_recipe(
             "title": "Act of Kindness",
             "emoji": "💛",
             "subtitle": "",
-            "why": "Prosocial behaviour is the foundation of Dharma.",
             "activity": "",
             "ai_why": punya_ai.get("why", ""),
             "ai_impact": punya_ai.get("impact", []),
@@ -250,7 +242,6 @@ async def get_recipe(
             "title": "Breathing Exercise",
             "emoji": "🧘",
             "subtitle": "",
-            "why": "Controlled breathing activates the vagus nerve.",
             "ai_why": breathing_ai.get("why", ""),
             "ai_impact": breathing_ai.get("impact", []),
             "icon_url": "",
