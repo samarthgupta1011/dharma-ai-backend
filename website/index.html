@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>myDharma — Ancient Wisdom for the Modern Soul</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="icon" href="assets/icons/favicon-32.svg" sizes="32x32" type="image/svg+xml">
+<link rel="icon" href="assets/icons/favicon-16.svg" sizes="16x16" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.svg">
+<meta property="og:image" content="assets/icons/og-image.svg">
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img class="nav-logo" src="assets/icons/logo.svg" alt="myDharma" width="42" height="42">
+      <span class="nav-brand-text">
+        <span class="nav-brand-my">my</span>
+        <span class="nav-brand-dharma">Dharma</span>
+      </span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/" class="nav-link active">Home</a></li>
+      <li><a href="/blogs/" class="nav-link">Blogs</a></li>
+      <li><a href="/investors.html" class="nav-link">Investors</a></li>
+      <li><a href="/contact.html" class="nav-link">Contact</a></li>
+      <li><a href="#waitlist" class="nav-cta">Join Waitlist</a></li>
+    </ul>
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/" onclick="closeMenu()">Home</a>
+  <a href="/blogs/" onclick="closeMenu()">Blogs</a>
+  <a href="/investors.html" onclick="closeMenu()">Investors</a>
+  <a href="/contact.html" onclick="closeMenu()">Contact</a>
+  <a href="#waitlist" class="nav-cta-mobile" onclick="closeMenu()">Join Waitlist</a>
+</div>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <div class="hero-logo-container">
+      <img class="hero-logo" src="assets/icons/logo.svg" alt="myDharma" width="200" height="200">
+      <span class="hero-brand-my">my</span>
+      <span class="hero-brand-dharma">Dharma</span>
+    </div>
+    <p class="hero-tagline">Ancient Wisdom for the Modern Soul</p>
+    <p class="hero-desc">Hindu spirituality explained with clarity, science, and personal relevance. No dogma. No guilt. Just wisdom that works.</p>
+
+    <div class="badge-coming-soon">Coming Soon</div>
+
+    <div class="store-badges">
+      <img src="assets/icons/badge-google-play.svg" alt="Coming Soon on Google Play">
+      <img src="assets/icons/badge-app-store.svg" alt="Coming Soon on App Store">
+    </div>
+
+    <div class="waitlist-section" id="waitlist">
+      <form class="waitlist-form" novalidate>
+        <input type="email" name="email" placeholder="Enter your email" required autocomplete="email">
+        <button type="submit" class="btn-primary">Join the Waitlist</button>
+      </form>
+      <p class="waitlist-success" hidden>🪷 You're on the list! We'll notify you when we launch.</p>
+      <p class="waitlist-error" hidden></p>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT YOU'LL GET (was Solution) -->
+<section id="solution">
+  <div class="fade-up">
+    <span class="section-label">What You'll Get</span>
+    <h2 class="section-title">Wisdom that explains itself</h2>
+    <p class="section-subtitle">Every teaching comes with the why, the science, and the real-world impact on your life.</p>
+  </div>
+  <div class="solution-points">
+    <div class="solution-point fade-up">
+      <div class="solution-icon">✦</div>
+      <div>
+        <h3>We explain the why behind every teaching</h3>
+        <p>Science, logic, and reasoning — not blind faith. Understand before you practice.</p>
+      </div>
+    </div>
+    <div class="solution-point fade-up">
+      <div class="solution-icon">✦</div>
+      <div>
+        <h3>Immediate tools that actually help</h3>
+        <p>Come in feeling low, leave feeling better. Every session has a real, measurable impact.</p>
+      </div>
+    </div>
+    <div class="solution-point fade-up">
+      <div class="solution-icon">✦</div>
+      <div>
+        <h3>Choose what resonates, skip what doesn't</h3>
+        <p>No judgment, no pressure. Cherry-pick wisdom that fits your life.</p>
+      </div>
+    </div>
+    <div class="solution-point fade-up">
+      <div class="solution-icon">✦</div>
+      <div>
+        <h3>Go as deep as you want</h3>
+        <p>Casual user or devoted learner — explore stories, scriptures, and cosmic cycles at your own pace.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS (was Journey) -->
+<section id="journey">
+  <div class="fade-up">
+    <span class="section-label">How It Works</span>
+    <h2 class="section-title">A guided journey, not a list of features</h2>
+    <p class="section-subtitle">Users share how they're feeling — our AI curates a personalised path from ancient wisdom to real impact.</p>
+  </div>
+  <div class="journey-steps">
+    <div class="journey-line"></div>
+    <div class="journey-step fade-up">
+      <div class="journey-dot">📖</div>
+      <div class="journey-text">
+        <h3>Bhagavad Gita Verse</h3>
+        <p>A relevant Sanskrit verse with soothing commentary audio and harmonizing music. We show exactly how Krishna's words connect to your current situation.</p>
+        <span class="journey-tag">Mind</span>
+      </div>
+    </div>
+    <div class="journey-step fade-up">
+      <div class="journey-dot">🫁</div>
+      <div class="journey-text">
+        <h3>Yogic Breathing Practice</h3>
+        <p>Ancient pranayama with the science explained — why this specific breathing exercise helps your brain right now. Interactive orb guides your inhale and exhale.</p>
+        <span class="journey-tag">Body</span>
+      </div>
+    </div>
+    <div class="journey-step fade-up">
+      <div class="journey-dot">💛</div>
+      <div class="journey-text">
+        <h3>Punya — A Good Deed</h3>
+        <p>A small, meaningful action rooted in Hindu philosophy. Call a friend. Thank your parents. Donate a tiny amount. No stakes, just goodness.</p>
+        <span class="journey-tag">Action</span>
+      </div>
+    </div>
+    <div class="journey-step fade-up">
+      <div class="journey-dot">🪷</div>
+      <div class="journey-text">
+        <h3>Guided Reflection</h3>
+        <p>Put your phone down and think. Thoughtful prompts — like a therapist would ask — help you internalize the entire journey.</p>
+        <span class="journey-tag">Soul</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT'S INSIDE (was Explore) -->
+<section id="explore">
+  <div class="fade-up">
+    <span class="section-label">What's Inside</span>
+    <h2 class="section-title">For the curious mind</h2>
+    <p class="section-subtitle">Dive deeper into the full catalog whenever you're ready.</p>
+  </div>
+  <div class="explore-cards">
+    <div class="explore-card fade-up">
+      <span class="explore-card-icon">🌌</span>
+      <h3>Cosmic Calendar</h3>
+      <p>Explore the Hindu Panchang — planetary movements, auspicious timings, and ancient cycles connected to your daily life. There if you're curious, never forced.</p>
+    </div>
+    <div class="explore-card fade-up">
+      <span class="explore-card-icon">📚</span>
+      <h3>Story Cards</h3>
+      <p>Short, engaging stories from Hindu scriptures — the Ramayana, Mahabharata, Puranas, and more. Ancient tales that still speak to modern life.</p>
+    </div>
+    <div class="explore-card fade-up">
+      <span class="explore-card-icon">🎵</span>
+      <h3>Full Practice Catalog</h3>
+      <p>Browse every Gita verse, breathing practice, and punya deed. Each one with soothing audio, commentary, and the "why" behind it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA — Waitlist -->
+<section class="cta-section" id="cta">
+  <div class="cta-content fade-up">
+    <span class="section-label">Join the Journey</span>
+    <h2 class="section-title">Be the first to experience it.</h2>
+    <p class="section-subtitle" style="margin: 0 auto 40px; text-align: center;">Join the waitlist and we'll notify you when myDharma launches.</p>
+    <div class="waitlist-section">
+      <form class="waitlist-form" novalidate>
+        <input type="email" name="email" placeholder="Enter your email" required autocomplete="email">
+        <button type="submit" class="btn-primary">Join the Waitlist</button>
+      </form>
+      <p class="waitlist-success" hidden>🪷 You're on the list! We'll notify you when we launch.</p>
+      <p class="waitlist-error" hidden></p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img class="footer-logo" src="assets/icons/logo-footer.svg" alt="myDharma" width="28" height="28">
+      <span class="footer-text">myDharma</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/blogs/">Blogs</a>
+      <a href="/investors.html">Investors</a>
+      <a href="/contact.html">Contact</a>
+    </div>
+    <span class="footer-copy">&copy; 2026 myDharma. All rights reserved.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+
+</body>
+</html>

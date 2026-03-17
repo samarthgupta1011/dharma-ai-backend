@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>myDharma — For Investors</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="icon" href="assets/icons/favicon-32.svg" sizes="32x32" type="image/svg+xml">
+<link rel="icon" href="assets/icons/favicon-16.svg" sizes="16x16" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.svg">
+<meta property="og:image" content="assets/icons/og-image.svg">
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img class="nav-logo" src="assets/icons/logo.svg" alt="myDharma" width="42" height="42">
+      <span class="nav-brand-text">
+        <span class="nav-brand-my">my</span>
+        <span class="nav-brand-dharma">Dharma</span>
+      </span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/" class="nav-link">Home</a></li>
+      <li><a href="/blogs/" class="nav-link">Blogs</a></li>
+      <li><a href="/investors.html" class="nav-link active">Investors</a></li>
+      <li><a href="/contact.html" class="nav-link">Contact</a></li>
+      <li><a href="/#waitlist" class="nav-cta">Join Waitlist</a></li>
+    </ul>
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/" onclick="closeMenu()">Home</a>
+  <a href="/blogs/" onclick="closeMenu()">Blogs</a>
+  <a href="/investors.html" onclick="closeMenu()">Investors</a>
+  <a href="/contact.html" onclick="closeMenu()">Contact</a>
+  <a href="/#waitlist" class="nav-cta-mobile" onclick="closeMenu()">Join Waitlist</a>
+</div>
+
+<!-- INVESTOR HERO -->
+<section class="hero investor-hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <span class="section-label">For Investors</span>
+    <h1 class="section-title" style="font-size: 48px; margin-bottom: 20px;">The Opportunity</h1>
+    <p class="hero-desc">myDharma is building a modern bridge to ancient Hindu wisdom — personalised, science-grounded, and designed for the digital generation. Here's the full picture.</p>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="fade-up">
+    <span class="section-label">The Problem</span>
+    <h2 class="section-title">A gap between ancient knowledge<br>and today's audience</h2>
+  </div>
+  <div class="problem-cards">
+    <div class="problem-card fade-up">
+      <div class="problem-icon">🔍</div>
+      <h3>Modern people want Hindu wisdom</h3>
+      <p>But they find it outdated, inaccessible, or preachy. The language is too complicated and the connection just isn't there.</p>
+    </div>
+    <div class="problem-card fade-up">
+      <div class="problem-icon">📱</div>
+      <h3>Existing apps push beliefs without explanation</h3>
+      <p>They offer hundreds of mantras or rituals but never explain why you should do them or what the real impact is.</p>
+    </div>
+    <div class="problem-card fade-up">
+      <div class="problem-icon">🌍</div>
+      <h3>Young Indians and diaspora feel disconnected</h3>
+      <p>No modern way to stay connected to their roots meaningfully — especially when living abroad.</p>
+    </div>
+    <div class="problem-card fade-up">
+      <div class="problem-icon">🚫</div>
+      <h3>Modern users reject what's imposed on them</h3>
+      <p>They want to choose what resonates. They need the "why" first — or they'll simply walk away.</p>
+    </div>
+  </div>
+</section>
+
+<!-- AUDIENCE -->
+<section id="audience">
+  <div class="fade-up">
+    <span class="section-label">Who It's For</span>
+    <h2 class="section-title">Three audiences, one bridge</h2>
+  </div>
+  <div class="audience-grid">
+    <div class="audience-card fade-up">
+      <span class="audience-emoji">🧠</span>
+      <h3>The Curious Skeptic</h3>
+      <p>Young, scientific-minded people curious about spiritual wisdom — but only if it's explained, not imposed.</p>
+    </div>
+    <div class="audience-card fade-up">
+      <span class="audience-emoji">🙏</span>
+      <h3>The Devoted Practitioner</h3>
+      <p>Already engaged with Hindu practices but craving deeper understanding in language that's clear and modern.</p>
+    </div>
+    <div class="audience-card fade-up">
+      <span class="audience-emoji">🌏</span>
+      <h3>The Indian Diaspora</h3>
+      <p>Millions living abroad wanting to maintain cultural and spiritual connection in a way that fits their modern lifestyle.</p>
+    </div>
+  </div>
+</section>
+
+<!-- COMPETITION -->
+<section id="competition">
+  <div class="fade-up">
+    <span class="section-label">Why We're Different</span>
+    <h2 class="section-title">Not another meditation app.<br>Not another mantra dump.</h2>
+  </div>
+  <div class="comp-table fade-up">
+    <div class="comp-grid">
+      <div class="comp-cell comp-header"></div>
+      <div class="comp-cell comp-header">Headspace / Calm</div>
+      <div class="comp-cell comp-header">Traditional Hindu Apps</div>
+      <div class="comp-cell comp-header ours">myDharma</div>
+
+      <div class="comp-cell comp-feature">Explains the "why"</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+
+      <div class="comp-cell comp-feature">Culturally rooted</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+      <div class="comp-cell comp-yes">✓</div>
+
+      <div class="comp-cell comp-feature">Personalised to your mood</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+
+      <div class="comp-cell comp-feature">Modern aesthetic</div>
+      <div class="comp-cell comp-yes">✓</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+
+      <div class="comp-cell comp-feature">AI-powered journey</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+
+      <div class="comp-cell comp-feature">Guided reflection</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-no">—</div>
+      <div class="comp-cell comp-yes">✓</div>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+  <div class="fade-up">
+    <span class="section-label">Roadmap</span>
+    <h2 class="section-title">Where we're headed</h2>
+  </div>
+  <div class="roadmap-items">
+    <div class="roadmap-item fade-up">
+      <span class="roadmap-time">Month 1–2</span>
+      <h3>MVP on Android</h3>
+      <p>Launch on Play Store as a React Native app. Core "For You" journey and Explorer tab live.</p>
+    </div>
+    <div class="roadmap-item fade-up">
+      <span class="roadmap-time">Month 3</span>
+      <h3>Test & Learn</h3>
+      <p>Organic marketing, friends and family testing. Gather feedback, iterate fast, validate product-market fit.</p>
+    </div>
+    <div class="roadmap-item fade-up">
+      <span class="roadmap-time">Month 4+</span>
+      <h3>iOS & Scale</h3>
+      <p>Assess traction, expand to App Store, and begin scaling marketing and user acquisition.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img class="footer-logo" src="assets/icons/logo-footer.svg" alt="myDharma" width="28" height="28">
+      <span class="footer-text">myDharma</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/blogs/">Blogs</a>
+      <a href="/investors.html">Investors</a>
+      <a href="/contact.html">Contact</a>
+    </div>
+    <span class="footer-copy">&copy; 2026 myDharma. All rights reserved.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+
+</body>
+</html>

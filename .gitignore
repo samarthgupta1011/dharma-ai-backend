@@ -53,3 +53,6 @@ local.settings.json
 
 responses/
 app/config/.env
+
+# React Component Preview
+previewConfig.json

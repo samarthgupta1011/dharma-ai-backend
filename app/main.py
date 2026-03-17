@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.admin.routes import ingredients as admin_ingredients
-from app.api.routes import auth, cosmic, metadata, recipe, stories, users
+from app.api.routes import auth, cosmic, metadata, recipe, stories, users, waitlist
 from app.config.settings import get_settings
 from app.models.ingredients import (
     BaseIngredient,
@@ -44,6 +44,7 @@ from app.models.ingredients import (
 from app.models.panchang import DailyPanchang
 from app.models.recipe_request import RecipeRequest
 from app.models.user import User
+from app.models.waitlist import WaitlistEntry
 
 settings = get_settings()
 
@@ -86,6 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             Reflection,
             DailyPanchang,
             RecipeRequest,
+            WaitlistEntry,
         ],
     )
 
@@ -137,6 +139,7 @@ app.include_router(cosmic.router)
 app.include_router(stories.router)
 app.include_router(metadata.router)
 app.include_router(admin_ingredients.router)
+app.include_router(waitlist.router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

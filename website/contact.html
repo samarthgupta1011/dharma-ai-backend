@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>myDharma — Contact Us</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="icon" href="assets/icons/favicon-32.svg" sizes="32x32" type="image/svg+xml">
+<link rel="icon" href="assets/icons/favicon-16.svg" sizes="16x16" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.svg">
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img class="nav-logo" src="assets/icons/logo.svg" alt="myDharma" width="42" height="42">
+      <span class="nav-brand-text">
+        <span class="nav-brand-my">my</span>
+        <span class="nav-brand-dharma">Dharma</span>
+      </span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/" class="nav-link">Home</a></li>
+      <li><a href="/blogs/" class="nav-link">Blogs</a></li>
+      <li><a href="/investors.html" class="nav-link">Investors</a></li>
+      <li><a href="/contact.html" class="nav-link active">Contact</a></li>
+      <li><a href="/#waitlist" class="nav-cta">Join Waitlist</a></li>
+    </ul>
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/" onclick="closeMenu()">Home</a>
+  <a href="/blogs/" onclick="closeMenu()">Blogs</a>
+  <a href="/investors.html" onclick="closeMenu()">Investors</a>
+  <a href="/contact.html" onclick="closeMenu()">Contact</a>
+  <a href="/#waitlist" class="nav-cta-mobile" onclick="closeMenu()">Join Waitlist</a>
+</div>
+
+<!-- CONTACT -->
+<section class="contact-section">
+  <div class="fade-up">
+    <span class="section-label">Contact Us</span>
+    <h1 class="section-title">Get in Touch</h1>
+    <p class="section-subtitle">Have questions, feedback, or just want to say hello? We'd love to hear from you.</p>
+  </div>
+  <div class="contact-cards">
+    <div class="contact-card fade-up">
+      <span class="contact-card-emoji">👤</span>
+      <h3>Samarth Gupta</h3>
+      <a href="mailto:samarthgupta1011@gmail.com">samarthgupta1011@gmail.com</a>
+    </div>
+    <div class="contact-card fade-up">
+      <span class="contact-card-emoji">👤</span>
+      <h3>Nishant Sachdeva</h3>
+      <a href="mailto:sachdevanishant19@gmail.com">sachdevanishant19@gmail.com</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img class="footer-logo" src="assets/icons/logo-footer.svg" alt="myDharma" width="28" height="28">
+      <span class="footer-text">myDharma</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/blogs/">Blogs</a>
+      <a href="/investors.html">Investors</a>
+      <a href="/contact.html">Contact</a>
+    </div>
+    <span class="footer-copy">&copy; 2026 myDharma. All rights reserved.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+
+</body>
+</html>
