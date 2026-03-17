@@ -57,6 +57,11 @@ document.querySelectorAll('.waitlist-form').forEach(form => {
     btn.disabled = true;
     btn.textContent = 'Joining...';
 
+    const showSuccess = () => {
+      form.style.display = 'none';
+      successEl.hidden = false;
+    };
+
     try {
       const res = await fetch(`${API_BASE}/api/waitlist`, {
         method: 'POST',
@@ -65,8 +70,7 @@ document.querySelectorAll('.waitlist-form').forEach(form => {
       });
 
       if (res.ok) {
-        form.hidden = true;
-        successEl.hidden = false;
+        showSuccess();
       } else {
         const data = await res.json().catch(() => null);
         errorEl.textContent = data?.detail || data?.message || 'Please enter a valid email.';
@@ -76,8 +80,7 @@ document.querySelectorAll('.waitlist-form').forEach(form => {
       }
     } catch {
       // Network error — show success for graceful degradation
-      form.hidden = true;
-      successEl.hidden = false;
+      showSuccess();
     }
   });
 });

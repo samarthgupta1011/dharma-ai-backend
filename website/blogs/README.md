@@ -36,10 +36,22 @@ The blog renderer uses [marked.js](https://marked.js.org/) — standard Markdown
 - **Headings**: `# H1` through `#### H4`
 - **Bold/Italic**: `**bold**`, `*italic*`
 - **Links**: `[text](url)`
-- **Images**: `![alt](url)` — images are responsive and rounded
+- **Images**: `![alt](assets/my-image.png)` — images are responsive and rounded
 - **Lists**: `- item` or `1. item`
 - **Blockquotes**: `> quote`
 - **Code**: `` `inline` `` or fenced blocks with ` ``` `
+
+## Adding Images
+
+Place image files in `website/blogs/assets/` and reference them with relative paths in your Markdown:
+
+```markdown
+![Breathing diagram](assets/breathing-diagram.png)
+```
+
+Supported formats: `.png`, `.jpg`, `.webp`, `.svg`
+
+Keep images reasonably sized — under 500KB per image is ideal since they're committed to the repo.
 
 ## Example
 
