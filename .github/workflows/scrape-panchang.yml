@@ -1,4 +1,4 @@
-##############################################################################
+a##############################################################################
 # scrape-panchang.yml
 # ───────────────────
 # Self-healing panchang data scraper.
@@ -93,7 +93,7 @@ jobs:
         run: |
           # Parse gap_report to find the earliest missing date across all cities
           python3 -c "
-          import json, sys
+          import json, sys, importlib.util
           from datetime import datetime, timedelta, date
           sys.path.insert(0, '.')
           from scripts.panchang_scraper.cosmos_writer import detect_gaps
@@ -110,9 +110,11 @@ jobs:
           earliest = min(starts)
           batch = int('${{ inputs.batch_size }}')
 
-          # Calculate how many days we can cover in this batch
-          from app.config.cities import SUPPORTED_CITIES
-          num_cities = len(SUPPORTED_CITIES)
+          # Load cities config directly (avoid importing app.config which needs pydantic)
+          spec = importlib.util.spec_from_file_location('cities', 'app/config/cities.py')
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          num_cities = len(mod.SUPPORTED_CITIES)
           days_per_batch = max(1, batch // num_cities)
 
           start_dt = datetime.strptime(earliest, '%Y-%m-%d').date()

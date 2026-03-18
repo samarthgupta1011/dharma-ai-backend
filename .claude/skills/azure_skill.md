@@ -50,6 +50,8 @@ Provide Claude with full application context so it can debug, add features, and 
 | Managed Identity (UMSI) | `dharma-env-umsi` | `dharma-rg` |
 | Storage Account | `dharmastorageacc` | `dharma-rg` |
 | Blob Container | `dharma-content` | (in `dharmastorageacc`) |
+| Static Web App | `dharma-website` | `dharma-rg` |
+| Service Principal (GitHub Actions) | `dharma-ai-github-actions` | — |
 | Location/Region | `eastus` | — |
 
 ### Key Vault Secrets
