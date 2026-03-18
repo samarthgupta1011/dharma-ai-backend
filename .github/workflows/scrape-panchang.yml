@@ -1,0 +1,158 @@
+##############################################################################
+# scrape-panchang.yml
+# ───────────────────
+# Self-healing panchang data scraper.
+#
+# Reads supported cities from app/config/cities.py, detects gaps in
+# Cosmos DB, scrapes missing data, and imports
+# the results into the panchang collection.
+#
+# Trigger manually via GitHub Actions UI. Set end_date to control how
+# far ahead to scrape.  Re-trigger until all gaps are filled.
+#
+# Adding a new city:
+#   1. Add city to SUPPORTED_CITIES in app/config/cities.py
+#   2. Trigger this workflow — it backfills from 2026-01-01 automatically
+##############################################################################
+
+name: Scrape Panchang Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      end_date:
+        description: "Scrape up to this date (YYYY-MM-DD). Default: 30 days from today."
+        required: false
+      batch_size:
+        description: "Max city×date combos to scrape per run (default: 500)"
+        required: false
+        default: "500"
+
+jobs:
+  scrape:
+    name: Scrape & Import Panchang
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install playwright pymongo
+          playwright install chromium
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Fetch Cosmos DB connection string
+        id: cosmos
+        run: |
+          COSMOS_URI=$(az keyvault secret show \
+            --vault-name dharma-kv \
+            --name cosmos-db-connection-string \
+            --query value -o tsv)
+          echo "::add-mask::$COSMOS_URI"
+          echo "uri=$COSMOS_URI" >> $GITHUB_OUTPUT
+
+      - name: Compute end date
+        id: dates
+        run: |
+          if [ -n "${{ inputs.end_date }}" ]; then
+            END_DATE="${{ inputs.end_date }}"
+          else
+            END_DATE=$(date -d "+30 days" +%Y-%m-%d 2>/dev/null || date -v+30d +%Y-%m-%d)
+          fi
+          echo "end_date=$END_DATE" >> $GITHUB_OUTPUT
+          echo "Target end date: $END_DATE"
+
+      - name: Detect gaps
+        id: gaps
+        run: |
+          python -m scripts.panchang_scraper.cosmos_writer gaps \
+            --connection-string "${{ steps.cosmos.outputs.uri }}" \
+            --end-date "${{ steps.dates.outputs.end_date }}" \
+            | tee gap_report.txt
+
+          # Extract total missing from output
+          TOTAL=$(grep "Total missing" gap_report.txt | grep -oP '\d+' || echo "0")
+          echo "total_missing=$TOTAL" >> $GITHUB_OUTPUT
+          echo "Total missing: $TOTAL"
+
+      - name: Determine scrape range
+        id: range
+        if: steps.gaps.outputs.total_missing != '0'
+        run: |
+          # Parse gap_report to find the earliest missing date across all cities
+          python3 -c "
+          import json, sys
+          from datetime import datetime, timedelta, date
+          sys.path.insert(0, '.')
+          from scripts.panchang_scraper.cosmos_writer import detect_gaps
+
+          end = datetime.strptime('${{ steps.dates.outputs.end_date }}', '%Y-%m-%d').date()
+          gaps, total = detect_gaps('${{ steps.cosmos.outputs.uri }}', end)
+
+          # Find earliest start date across all cities with gaps
+          starts = [g['start'] for g in gaps.values() if g['start']]
+          if not starts:
+              print('No gaps found')
+              sys.exit(0)
+
+          earliest = min(starts)
+          batch = int('${{ inputs.batch_size }}')
+
+          # Calculate how many days we can cover in this batch
+          from app.config.cities import SUPPORTED_CITIES
+          num_cities = len(SUPPORTED_CITIES)
+          days_per_batch = max(1, batch // num_cities)
+
+          start_dt = datetime.strptime(earliest, '%Y-%m-%d').date()
+          batch_end = min(start_dt + timedelta(days=days_per_batch - 1), end)
+
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f'start_date={start_dt.isoformat()}\n')
+              f.write(f'end_date={batch_end.isoformat()}\n')
+
+          print(f'Scraping: {start_dt} to {batch_end} ({(batch_end - start_dt).days + 1} days × {num_cities} cities)')
+          "
+
+      - name: Run scraper
+        if: steps.gaps.outputs.total_missing != '0'
+        run: |
+          python -m scripts.panchang_scraper.scraper \
+            --start-date "${{ steps.range.outputs.start_date }}" \
+            --end-date "${{ steps.range.outputs.end_date }}" \
+            --output panchang_batch.json \
+            --delay 1.5
+
+      - name: Import to Cosmos DB
+        if: steps.gaps.outputs.total_missing != '0'
+        run: |
+          python -m scripts.panchang_scraper.cosmos_writer import \
+            --connection-string "${{ steps.cosmos.outputs.uri }}" \
+            --input panchang_batch.json
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Panchang Scrape Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target end date** | ${{ steps.dates.outputs.end_date }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total missing (before)** | ${{ steps.gaps.outputs.total_missing }} |" >> $GITHUB_STEP_SUMMARY
+          if [ -f panchang_batch.json ]; then
+            RECORDS=$(python3 -c "import json; d=json.load(open('panchang_batch.json')); print(sum(len(c) for c in d.values()))")
+            echo "| **Records scraped** | ${RECORDS} |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Re-trigger this workflow to continue filling gaps." >> $GITHUB_STEP_SUMMARY

@@ -24,6 +24,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
+from app.config.cities import PANCHANG_DATA_START, SUPPORTED_CITIES
 from app.config.settings import get_settings
 from app.models.ingredients import ActivityType
 
@@ -136,5 +137,7 @@ async def get_app_configs() -> Dict[str, Any]:
             for at in ActivityType
         ],
         "moods": _MOODS,
+        "supported_cities": list(SUPPORTED_CITIES.keys()),
+        "panchang_data_start": PANCHANG_DATA_START,
         "app_version": settings.APP_VERSION,
     }

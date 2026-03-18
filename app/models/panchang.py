@@ -12,13 +12,11 @@ What is a Panchang?
     4. Yoga      – A combined Sun+Moon longitude measure (27 types).
     5. Karana    – Half of a Tithi (11 types).
 
-Dharma AI's angle:
-  Every panchang entry includes `inferences` — a list of modern scientific
-  or biological observations that correlate with the cosmic state.
-  Example: during a Purnamasi (full moon) Tithi, studies have linked
-  heightened tidal gravitational forces to disrupted sleep and increased
-  emergency-room admissions.  These ground the ancient calendar in
-  observable reality for skeptical users.
+Data source:
+  Scraped via scripts/panchang_scraper/.
+  The full scraper output (~60+ fields across 12 sections) is stored
+  in `raw_data` as a flexible dict.  Core fields are promoted to
+  top-level typed attributes for fast API queries.
 
 Indexing:
   A compound unique index on (date, city) prevents duplicate entries and
@@ -26,7 +24,7 @@ Indexing:
 """
 
 from datetime import date
-from typing import Annotated, List
+from typing import Any, Dict, List
 
 from beanie import Document, Indexed
 from pydantic import Field
@@ -35,95 +33,49 @@ from pymongo import ASCENDING, IndexModel
 
 class DailyPanchang(Document):
     """
-    Pre-calculated daily Panchang snapshot for a specific city and date.
+    Daily Panchang snapshot for a specific city and date.
 
-    Data should be populated by a scheduled cron job (e.g., Azure Functions
-    Timer trigger) that runs nightly and inserts the next day's data for
-    all supported cities.
+    Populated by the scrape-panchang GitHub Actions workflow which runs
+    the panchang scraper and writes to Cosmos DB.
     """
 
     # ── Primary lookup key ────────────────────────────────────────────────────
-    date: Annotated[date, Indexed()]
-    city: Annotated[str, Indexed()]
+    date: Indexed(date)
+    city: Indexed(str)
 
-    # ── The Five Limbs (Pancha Anga) ──────────────────────────────────────────
-    tithi: str = Field(
-        ...,
-        description=(
-            "Lunar day name.  Example: 'Tritiya' (3rd lunar day).  "
-            "Each tithi is ~23 h 37 min; two tithis may occur in one solar day."
-        ),
-    )
-    tithi_end: str = Field(
-        ...,
-        description="Local time at which the current tithi ends.  Format: HH:MM.",
-    )
+    # ── Core panchang fields (promoted for fast queries) ──────────────────────
+    tithi: str = Field(default="", description="Lunar day name. E.g. 'Tritiya'.")
+    nakshatra: str = Field(default="", description="Lunar mansion (one of 27).")
+    yoga: str = Field(default="", description="One of 27 Panchang yogas.")
+    karana: str = Field(default="", description="Half-tithi element (one of 11).")
+    paksha: str = Field(default="", description="'Shukla Paksha' or 'Krishna Paksha'.")
+    sunrise: str = Field(default="", description="Local sunrise time.")
+    sunset: str = Field(default="", description="Local sunset time.")
 
-    nakshatra: str = Field(
-        ...,
+    # ── Full scraper data ─────────────────────────────────────────────────────
+    raw_data: Dict[str, Any] = Field(
+        default_factory=dict,
         description=(
-            "Lunar mansion (one of 27).  The Moon transits each nakshatra "
-            "in ~1 day.  Example: 'Rohini' — associated with fertility and growth."
-        ),
-    )
-    nakshatra_end: str = Field(
-        ...,
-        description="Local time at which the current nakshatra ends.  Format: HH:MM.",
-    )
-
-    vaar: str = Field(
-        ...,
-        description=(
-            "Sanskrit weekday.  Named after celestial bodies: "
-            "Ravivaar (Sun), Somavaar (Moon), Mangalavaar (Mars), "
-            "Budhavaar (Mercury), Guruvaar (Jupiter), "
-            "Shukravaar (Venus), Shanivaar (Saturn)."
+            "Complete scraper output for this city+date. Contains all 12 sections: "
+            "sunrise_and_moonrise, panchang, rashi_and_nakshatra, ritu_and_ayana, "
+            "auspicious_timings, inauspicious_timings, anandadi_and_tamil_yoga, "
+            "nivas_and_shool, other_calendars_and_epoch, day_festivals_and_events, "
+            "lunar_month_samvat, mantri_mandala, header."
         ),
     )
 
-    yoga: str = Field(
-        ...,
-        description=(
-            "One of 27 Panchang yogas, calculated from the combined longitude "
-            "of the Sun and Moon.  Example: 'Siddha' — historically auspicious "
-            "for beginning new ventures."
-        ),
-    )
-
-    karana: str = Field(
-        ...,
-        description="Half-tithi element (one of 11 types).  Example: 'Bava'.",
-    )
-    karana_end: str = Field(
-        ...,
-        description="Local time at which the current karana ends.  Format: HH:MM.",
-    )
-
-    paksha: str = Field(
-        ...,
-        description=(
-            "'Shukla Paksha' (waxing fortnight, new → full moon) or "
-            "'Krishna Paksha' (waning fortnight, full → new moon)."
-        ),
-    )
-
-    # ── Scientific / Biological Inferences ────────────────────────────────────
+    # ── AI-generated inferences (populated later) ─────────────────────────────
     inferences: List[str] = Field(
         default_factory=list,
         description=(
-            "A list of evidence-based observations that correlate with today's "
-            "cosmic state.  Generated by the AI engine or pre-populated by "
-            "subject-matter experts.  These are Dharma AI's key differentiator "
-            "for skeptic users.  "
-            "Example: ['Full moon gravitational pull increases interstitial fluid "
-            "pressure; consider lighter meals and adequate hydration today.']"
+            "AI-generated scientific/biological observations correlated with "
+            "today's cosmic state. Will be populated in Phase 2."
         ),
     )
 
     class Settings:
         name = "panchang"
         indexes = [
-            # Compound unique index: one record per city+date combination.
             IndexModel(
                 [("date", ASCENDING), ("city", ASCENDING)],
                 unique=True,
