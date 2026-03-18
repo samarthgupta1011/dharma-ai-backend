@@ -53,36 +53,12 @@ nav {
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
   text-decoration: none;
 }
 
-.nav-logo {
-  width: 42px;
-  height: 42px;
-}
-
-.nav-brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-}
-
-.nav-brand-my {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 11px;
-  letter-spacing: 0.25em;
-  color: var(--accent-primary);
-  opacity: 0.7;
-  font-weight: 300;
-}
-
-.nav-brand-dharma {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 22px;
-  letter-spacing: 0.08em;
-  font-weight: 500;
-  color: var(--text-primary);
+.nav-brand-logo {
+  height: 48px;
+  width: auto;
 }
 
 .nav-links {
@@ -227,16 +203,16 @@ nav {
 }
 
 .hero-logo-container {
-  margin-bottom: 40px;
+  margin-bottom: -24px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 0;
 }
 
 .hero-logo {
-  width: 200px;
-  height: 200px;
-  margin-bottom: 24px;
+  width: 280px;
+  height: auto;
   filter: drop-shadow(0 0 40px rgba(155, 142, 196, 0.2));
   animation: floatLogo 6s ease-in-out infinite;
 }
@@ -246,30 +222,12 @@ nav {
   50% { transform: translateY(-8px); }
 }
 
-.hero-brand-my {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 18px;
-  letter-spacing: 0.35em;
-  color: var(--accent-primary);
-  opacity: 0.7;
-  font-weight: 300;
-}
-
-.hero-brand-dharma {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 56px;
-  letter-spacing: 0.08em;
-  font-weight: 500;
-  color: var(--text-primary);
-  line-height: 1.1;
-}
-
 .hero-tagline {
   font-family: 'Cormorant Garamond', serif;
   font-size: 22px;
   color: var(--text-secondary);
   font-weight: 300;
-  margin-top: 16px;
+  margin-top: 0;
   letter-spacing: 0.04em;
   font-style: italic;
 }
@@ -848,19 +806,11 @@ footer {
 .footer-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
 }
 
-.footer-logo {
-  width: 28px;
-  height: 28px;
-}
-
-.footer-text {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--text-primary);
+.footer-brand-logo {
+  height: 40px;
+  width: auto;
 }
 
 .footer-copy {
@@ -886,9 +836,8 @@ footer {
   .hamburger { display: flex; }
 
   .hero { min-height: 100svh; padding: 100px 20px 60px; }
-  .hero-logo { width: 160px; height: 160px; }
-  .hero-brand-dharma { font-size: 42px; }
-  .hero-brand-my { font-size: 14px; }
+  .hero-logo { width: 220px; }
+  .nav-brand-logo { height: 40px; }
   .hero-tagline { font-size: 18px; }
   .hero-desc { font-size: 15px; }
   .hero-buttons { flex-direction: column; align-items: center; }
@@ -915,8 +864,7 @@ footer {
 }
 
 @media (max-width: 480px) {
-  .hero-logo { width: 130px; height: 130px; }
-  .hero-brand-dharma { font-size: 36px; }
+  .hero-logo { width: 180px; }
   .section-title { font-size: 26px; }
   .nav-inner { padding: 0 16px; }
 }
@@ -939,14 +887,16 @@ footer {
 .store-badges {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   margin-top: 24px;
   flex-wrap: wrap;
+  padding: 0 16px;
 }
 
 .store-badges img {
-  height: 54px;
+  height: 50px;
   width: auto;
+  max-width: 160px;
   opacity: 0.85;
   transition: opacity 0.3s, transform 0.2s;
   border-radius: 8px;
@@ -963,6 +913,7 @@ footer {
   max-width: 480px;
   margin-left: auto;
   margin-right: auto;
+  padding: 0 16px;
 }
 
 .waitlist-form {
@@ -997,6 +948,10 @@ footer {
   cursor: pointer;
   border: none;
   font-family: 'DM Sans', sans-serif;
+  padding: 14px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .waitlist-form .btn-primary:disabled {
@@ -1268,15 +1223,27 @@ footer {
 @media (max-width: 768px) {
   .waitlist-form {
     flex-direction: column;
+    gap: 10px;
+  }
+
+  .waitlist-form input[type="email"] {
+    padding: 16px 20px;
+    font-size: 16px;
+    border-radius: 14px;
   }
 
   .waitlist-form .btn-primary {
     width: 100%;
+    max-width: none;
     text-align: center;
+    padding: 16px 24px;
+    border-radius: 14px;
+    font-size: 16px;
   }
 
   .store-badges img {
-    height: 40px;
+    height: 44px;
+    max-width: 46%;
   }
 
   .blog-grid {
