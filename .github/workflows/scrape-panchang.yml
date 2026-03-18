@@ -32,7 +32,7 @@ jobs:
   scrape:
     name: Scrape & Import Panchang
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 350
 
     steps:
       - name: Checkout code
@@ -134,7 +134,8 @@ jobs:
             --start-date "${{ steps.range.outputs.start_date }}" \
             --end-date "${{ steps.range.outputs.end_date }}" \
             --output panchang_batch.json \
-            --delay 1.5
+            --delay 1.5 \
+            --max-duration 330
 
       - name: Import to Cosmos DB
         if: steps.gaps.outputs.total_missing != '0'

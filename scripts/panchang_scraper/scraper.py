@@ -173,7 +173,10 @@ def scrape_with_retry(page, city_name, geoname_id, date, save_html_path=None):
 
 
 def run_scraper(cities, start_date, end_date, output_path, progress_path,
-                save_html=False, headless=True, request_delay=REQUEST_DELAY):
+                save_html=False, headless=True, request_delay=REQUEST_DELAY,
+                max_duration_minutes=None):
+    scraper_start_time = time.monotonic()
+    max_duration_secs = max_duration_minutes * 60 if max_duration_minutes else None
     dates = generate_dates(start_date, end_date)
     total_tasks = len(dates) * len(cities)
 
@@ -198,8 +201,12 @@ def run_scraper(cities, start_date, end_date, output_path, progress_path,
     print(f"Tasks remaining: {len(pending_tasks)}/{total_tasks}")
     print(f"Cities: {', '.join(cities.keys())}")
     print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+    if max_duration_secs:
+        print(f"Time limit: {max_duration_minutes} minutes")
     print(f"Output: {output_path}")
     print()
+
+    stopped_early = False
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -215,6 +222,16 @@ def run_scraper(cities, start_date, end_date, output_path, progress_path,
 
         try:
             for i, (date, city_name, geoname_id, task_key) in enumerate(pending_tasks):
+                # Check time limit before starting next task
+                if max_duration_secs:
+                    elapsed = time.monotonic() - scraper_start_time
+                    if elapsed >= max_duration_secs:
+                        elapsed_min = elapsed / 60
+                        print(f"\nTime limit reached ({elapsed_min:.1f} min). Stopping gracefully.")
+                        print(f"Completed: {len(progress['completed'])}/{total_tasks}")
+                        stopped_early = True
+                        break
+
                 task_num = completed_count + i + 1
                 date_display = date.strftime('%d/%m/%Y')
 
@@ -260,8 +277,8 @@ def run_scraper(cities, start_date, end_date, output_path, progress_path,
         finally:
             browser.close()
 
-    # Retry previously failed tasks
-    if progress["failed"]:
+    # Retry previously failed tasks (skip if we stopped early due to time limit)
+    if progress["failed"] and not stopped_early:
         failed_keys = list(progress["failed"].keys())
         print(f"\nRetrying {len(failed_keys)} previously failed task(s)...")
 
@@ -360,6 +377,8 @@ def main():
     parser.add_argument("--save-html", action="store_true")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--delay", type=float, default=None)
+    parser.add_argument("--max-duration", type=int, default=None,
+                        help="Max run time in minutes. Scraper stops gracefully before this limit.")
 
     args = parser.parse_args()
 
@@ -384,6 +403,7 @@ def main():
         request_delay=request_delay,
         save_html=args.save_html,
         headless=not args.headed,
+        max_duration_minutes=args.max_duration,
     )
 
 
