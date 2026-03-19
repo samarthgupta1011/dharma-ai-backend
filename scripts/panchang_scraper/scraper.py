@@ -131,6 +131,13 @@ def scrape_single_page(page, city_name, geoname_id, date, save_html_path=None):
         print(f"  Saved HTML to {save_html_path}")
 
     data = parse_panchang_page(page)
+
+    # Detect blocked/empty responses — the site may be serving CAPTCHAs or rate-limiting
+    if not data or not data.get("panchang"):
+        raise RuntimeError(
+            "Page returned no panchang data — site may be blocking requests"
+        )
+
     return data
 
 

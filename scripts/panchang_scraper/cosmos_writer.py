@@ -89,11 +89,19 @@ def import_data(connection_string: str, input_path: str, db_name: str = "dharma_
     skipped = 0
     errors = 0
 
+    empty = 0
+
     for date_str, cities in data.items():
         record_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
         for city_name, raw_data in cities.items():
             total += 1
+
+            # Skip records where the scraper got an empty/blocked page
+            if not raw_data or not raw_data.get("panchang"):
+                empty += 1
+                continue
+
             core = _extract_core_fields(raw_data)
 
             doc = {
@@ -120,9 +128,10 @@ def import_data(connection_string: str, input_path: str, db_name: str = "dharma_
     print(f"  Total: {total}")
     print(f"  Inserted: {inserted}")
     print(f"  Skipped (already exists): {skipped}")
+    print(f"  Skipped (empty data): {empty}")
     print(f"  Errors: {errors}")
 
-    return {"total": total, "inserted": inserted, "skipped": skipped, "errors": errors}
+    return {"total": total, "inserted": inserted, "skipped": skipped, "empty": empty, "errors": errors}
 
 
 def detect_gaps(connection_string: str, end_date: date, db_name: str = "dharma_db"):
@@ -146,6 +155,17 @@ def detect_gaps(connection_string: str, end_date: date, db_name: str = "dharma_d
     total_missing = 0
 
     for city_name in cities:
+        # Delete any records with empty raw_data so they get re-scraped
+        deleted = collection.delete_many(
+            {"city": city_name, "$or": [
+                {"raw_data": {}},
+                {"raw_data": None},
+                {"tithi": "", "nakshatra": "", "sunrise": ""},
+            ]}
+        )
+        if deleted.deleted_count > 0:
+            print(f"  Cleaned {deleted.deleted_count} empty record(s) for {city_name}")
+
         # Find the latest date for this city
         latest = collection.find_one(
             {"city": city_name},
