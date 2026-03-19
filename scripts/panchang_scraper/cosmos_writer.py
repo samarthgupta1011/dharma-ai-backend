@@ -31,7 +31,19 @@ from pathlib import Path
 import time as _time
 
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError, BulkWriteError, WriteError
+from pymongo.errors import DuplicateKeyError, BulkWriteError, WriteError, OperationFailure
+
+
+def _cosmos_retry(fn, max_attempts=5):
+    """Run fn() with retry on Cosmos DB 16500 (RU exhaustion)."""
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except (WriteError, OperationFailure) as e:
+            if "16500" in str(e) and attempt < max_attempts - 1:
+                _time.sleep(0.5 * (attempt + 1))
+            else:
+                raise
 
 
 def _get_supported_cities() -> dict[str, int]:
@@ -157,33 +169,12 @@ def detect_gaps(connection_string: str, end_date: date, db_name: str = "dharma_d
     total_missing = 0
 
     for city_name in cities:
-        # Delete any records with empty raw_data so they get re-scraped
-        empty_filter = {"city": city_name, "$or": [
-            {"raw_data": {}},
-            {"raw_data": None},
-            {"tithi": "", "nakshatra": "", "sunrise": ""},
-        ]}
-        deleted_count = 0
-        for doc in list(collection.find(empty_filter, {"_id": 1})):
-            for attempt in range(5):
-                try:
-                    collection.delete_one({"_id": doc["_id"]})
-                    deleted_count += 1
-                    break
-                except WriteError as e:
-                    if "16500" in str(e) and attempt < 4:
-                        _time.sleep(0.5 * (attempt + 1))
-                    else:
-                        raise
-        if deleted_count > 0:
-            print(f"  Cleaned {deleted_count} empty record(s) for {city_name}")
-
         # Find the latest date for this city
-        latest = collection.find_one(
+        latest = _cosmos_retry(lambda: collection.find_one(
             {"city": city_name},
             sort=[("date", -1)],
             projection={"date": 1},
-        )
+        ))
 
         if latest and latest.get("date"):
             latest_date = latest["date"]
