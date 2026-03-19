@@ -28,8 +28,10 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import time as _time
+
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError, BulkWriteError
+from pymongo.errors import DuplicateKeyError, BulkWriteError, WriteError
 
 
 def _get_supported_cities() -> dict[str, int]:
@@ -156,15 +158,25 @@ def detect_gaps(connection_string: str, end_date: date, db_name: str = "dharma_d
 
     for city_name in cities:
         # Delete any records with empty raw_data so they get re-scraped
-        deleted = collection.delete_many(
-            {"city": city_name, "$or": [
-                {"raw_data": {}},
-                {"raw_data": None},
-                {"tithi": "", "nakshatra": "", "sunrise": ""},
-            ]}
-        )
-        if deleted.deleted_count > 0:
-            print(f"  Cleaned {deleted.deleted_count} empty record(s) for {city_name}")
+        empty_filter = {"city": city_name, "$or": [
+            {"raw_data": {}},
+            {"raw_data": None},
+            {"tithi": "", "nakshatra": "", "sunrise": ""},
+        ]}
+        deleted_count = 0
+        for doc in list(collection.find(empty_filter, {"_id": 1})):
+            for attempt in range(5):
+                try:
+                    collection.delete_one({"_id": doc["_id"]})
+                    deleted_count += 1
+                    break
+                except WriteError as e:
+                    if "16500" in str(e) and attempt < 4:
+                        _time.sleep(0.5 * (attempt + 1))
+                    else:
+                        raise
+        if deleted_count > 0:
+            print(f"  Cleaned {deleted_count} empty record(s) for {city_name}")
 
         # Find the latest date for this city
         latest = collection.find_one(
